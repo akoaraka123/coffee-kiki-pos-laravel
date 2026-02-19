@@ -1,20 +1,14 @@
-@extends('layouts.app-shell')
+@extends('layouts.dashboard')
 
 @section('title', 'Add Account')
 
-@section('sidebar')
-    <a href="{{ route('admin.dashboard') }}" class="block rounded-2xl px-4 py-3 text-sm {{ request()->routeIs('admin.dashboard') ? 'bg-white/10 text-white' : 'text-white/70 hover:bg-white/5 hover:text-white' }}">
+@section('menu')
+    <a href="{{ route('admin.dashboard') }}" class="block rounded-2xl px-4 py-3 text-sm {{ request()->routeIs('admin.dashboard') ? 'bg-white/10 text-white' : 'text-white/70 hover:bg-white/10 hover:text-white' }}">
         Dashboard
     </a>
-    <a href="{{ route('admin.users.index') }}" class="block rounded-2xl px-4 py-3 text-sm {{ request()->routeIs('admin.users.*') ? 'bg-white/10 text-white' : 'text-white/70 hover:bg-white/5 hover:text-white' }}">
-        Manage Users
+    <a href="{{ route('admin.users.index') }}" class="block rounded-2xl px-4 py-3 text-sm {{ request()->routeIs('admin.users.*') ? 'bg-white/10 text-white' : 'text-white/70 hover:bg-white/10 hover:text-white' }}">
+        Manage Accounts
     </a>
-    <form method="POST" action="{{ route('logout') }}" class="pt-2">
-        @csrf
-        <button type="submit" class="w-full rounded-2xl px-4 py-3 text-left text-sm text-white/70 hover:bg-white/5 hover:text-white">
-            Logout
-        </button>
-    </form>
 @endsection
 
 @section('content')
@@ -33,7 +27,7 @@
         </div>
     @endif
 
-    <form method="POST" action="{{ route('admin.users.store') }}" class="mt-6 space-y-5 rounded-[24px] border border-white/10 bg-[#232323] p-6">
+    <form method="POST" action="{{ route('admin.users.store') }}" class="mt-6 space-y-5 rounded-[24px] border border-white/10 bg-white/5 p-6">
         @csrf
 
         <div>

@@ -81,7 +81,6 @@
                             <div class="mt-6 text-center">
                                 <h1 class="text-2xl font-semibold leading-snug sm:text-3xl">
                                     <span class="text-white">Welcome Back</span>,
-                                    <span class="font-normal text-white/70">Please login to your account</span>
                                 </h1>
                             </div>
 
