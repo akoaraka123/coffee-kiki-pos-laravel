@@ -43,7 +43,7 @@
                                 <span class="font-medium">Dashboard</span>
                             </a>
 
-                            <a href="{{ route('pos') }}" class="group flex items-center gap-3 rounded-xl px-4 py-3 text-sm {{ request()->routeIs('pos') || request()->routeIs('orders.create') || request()->routeIs('orders.store') ? 'bg-white/10 text-white' : 'text-white/70 hover:bg-white/5 hover:text-white' }}">
+                            <a href="{{ $isAdmin ? route('admin.orders.index') : route('pos') }}" class="group flex items-center gap-3 rounded-xl px-4 py-3 text-sm {{ request()->routeIs('pos') || request()->routeIs('orders.create') || request()->routeIs('orders.store') || request()->routeIs('admin.orders.*') ? 'bg-white/10 text-white' : 'text-white/70 hover:bg-white/5 hover:text-white' }}">
                                 <span class="grid h-9 w-9 place-items-center rounded-xl border border-white/10 bg-white/5 text-white/80 group-hover:bg-white/10">O</span>
                                 <span class="font-medium">Orders</span>
                             </a>

@@ -4,6 +4,7 @@ use App\Http\Controllers\ProfileController;
 use App\Http\Controllers\AdminDashboardController;
 use App\Http\Controllers\StaffDashboardController;
 use App\Http\Controllers\Admin\AdminUserController;
+use App\Http\Controllers\Admin\AdminOrderController;
 use App\Http\Controllers\OrderController;
 use Illuminate\Support\Facades\Route;
 
@@ -29,6 +30,8 @@ Route::prefix('admin')
     ->group(function () {
         Route::get('/dashboard', AdminDashboardController::class)->name('dashboard');
 
+        Route::get('/orders', [AdminOrderController::class, 'index'])->name('orders.index');
+
         Route::get('/users', [AdminUserController::class, 'index'])->name('users.index');
         Route::get('/users/create', [AdminUserController::class, 'create'])->name('users.create');
         Route::post('/users', [AdminUserController::class, 'store'])->name('users.store');
@@ -38,13 +41,13 @@ Route::prefix('admin')
     });
 
 Route::prefix('staff')
-    ->middleware(['auth', 'verified', 'staff_or_admin'])
+    ->middleware(['auth', 'verified', 'role:staff'])
     ->name('staff.')
     ->group(function () {
         Route::get('/dashboard', StaffDashboardController::class)->name('dashboard');
     });
 
-Route::middleware(['auth', 'verified', 'staff_or_admin'])
+Route::middleware(['auth', 'verified', 'role:staff'])
     ->group(function () {
         Route::get('/orders', [OrderController::class, 'index'])->name('orders.index');
         Route::get('/orders/create', [OrderController::class, 'create'])->name('orders.create');

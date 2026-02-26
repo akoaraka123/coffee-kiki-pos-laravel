@@ -10,6 +10,7 @@ use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Str;
 use Illuminate\View\View;
+use Symfony\Component\HttpFoundation\Response;
 
 class OrderController extends Controller
 {
@@ -22,13 +23,18 @@ class OrderController extends Controller
         ]);
     }
 
-    public function create(): View
+    public function create(): Response
     {
         return $this->pos();
     }
 
-    public function pos(): View
+    public function pos(): Response
     {
+        $user = request()->user();
+        if ($user && method_exists($user, 'isAdmin') && $user->isAdmin()) {
+            return redirect()->route('admin.dashboard');
+        }
+
         $products = Product::query()
             ->where('is_active', true)
             ->orderBy('category')
@@ -36,13 +42,18 @@ class OrderController extends Controller
             ->orderBy('size')
             ->get(['id', 'name', 'price', 'category', 'size', 'image']);
 
-        return view('orders.create', [
+        return response()->view('orders.create', [
             'products' => $products,
         ]);
     }
 
     public function store(Request $request): RedirectResponse
     {
+        $user = $request->user();
+        if ($user && method_exists($user, 'isAdmin') && $user->isAdmin()) {
+            abort(403);
+        }
+
         $validated = $request->validate([
             'customer_name' => ['nullable', 'string', 'max:255'],
             'status' => ['required', 'string', 'in:pending,paid,cancelled'],
