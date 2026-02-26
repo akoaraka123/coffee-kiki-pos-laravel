@@ -33,7 +33,8 @@ class OrderController extends Controller
             ->where('is_active', true)
             ->orderBy('category')
             ->orderBy('name')
-            ->get(['id', 'name', 'price', 'category']);
+            ->orderBy('size')
+            ->get(['id', 'name', 'price', 'category', 'size', 'image']);
 
         return view('orders.create', [
             'products' => $products,

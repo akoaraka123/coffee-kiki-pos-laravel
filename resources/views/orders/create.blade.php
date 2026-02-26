@@ -3,17 +3,29 @@
 @section('title', 'POS')
 
 @section('pos_sidebar')
-    <button type="button" class="group flex w-full items-center gap-3 rounded-xl px-4 py-3 text-left text-sm" :class="activeTab === 'coffee' ? 'bg-white/10 text-white' : 'text-white/70 hover:bg-white/5 hover:text-white'" x-on:click="activeTab = 'coffee'">
-        <span class="grid h-9 w-9 place-items-center rounded-xl border border-white/10 bg-white/5 text-white/80 group-hover:bg-white/10">C</span>
-        <span class="font-medium">Coffee</span>
+    <button type="button" class="group flex w-full items-center gap-3 rounded-xl px-4 py-3 text-left text-sm" :class="activeTab === 'milk_tea' ? 'bg-white/10 text-white' : 'text-white/70 hover:bg-white/5 hover:text-white'" x-on:click="activeTab = 'milk_tea'">
+        <span class="grid h-9 w-9 place-items-center rounded-xl border border-white/10 bg-white/5 text-white/80 group-hover:bg-white/10">M</span>
+        <span class="font-medium">MILK TEA</span>
     </button>
-    <button type="button" class="group flex w-full items-center gap-3 rounded-xl px-4 py-3 text-left text-sm" :class="activeTab === 'non-coffee' ? 'bg-white/10 text-white' : 'text-white/70 hover:bg-white/5 hover:text-white'" x-on:click="activeTab = 'non-coffee'">
-        <span class="grid h-9 w-9 place-items-center rounded-xl border border-white/10 bg-white/5 text-white/80 group-hover:bg-white/10">N</span>
-        <span class="font-medium">Non-Coffee</span>
+    <button type="button" class="group flex w-full items-center gap-3 rounded-xl px-4 py-3 text-left text-sm" :class="activeTab === 'iced_coffee' ? 'bg-white/10 text-white' : 'text-white/70 hover:bg-white/5 hover:text-white'" x-on:click="activeTab = 'iced_coffee'">
+        <span class="grid h-9 w-9 place-items-center rounded-xl border border-white/10 bg-white/5 text-white/80 group-hover:bg-white/10">I</span>
+        <span class="font-medium">ICED COFFEE</span>
     </button>
-    <button type="button" class="group flex w-full items-center gap-3 rounded-xl px-4 py-3 text-left text-sm" :class="activeTab === 'snacks' ? 'bg-white/10 text-white' : 'text-white/70 hover:bg-white/5 hover:text-white'" x-on:click="activeTab = 'snacks'">
+    <button type="button" class="group flex w-full items-center gap-3 rounded-xl px-4 py-3 text-left text-sm" :class="activeTab === 'milky_fruit_jam' ? 'bg-white/10 text-white' : 'text-white/70 hover:bg-white/5 hover:text-white'" x-on:click="activeTab = 'milky_fruit_jam'">
+        <span class="grid h-9 w-9 place-items-center rounded-xl border border-white/10 bg-white/5 text-white/80 group-hover:bg-white/10">F</span>
+        <span class="font-medium">MILKY FRUIT JAM SERIES</span>
+    </button>
+    <button type="button" class="group flex w-full items-center gap-3 rounded-xl px-4 py-3 text-left text-sm" :class="activeTab === 'sticky_milk' ? 'bg-white/10 text-white' : 'text-white/70 hover:bg-white/5 hover:text-white'" x-on:click="activeTab = 'sticky_milk'">
         <span class="grid h-9 w-9 place-items-center rounded-xl border border-white/10 bg-white/5 text-white/80 group-hover:bg-white/10">S</span>
-        <span class="font-medium">Snacks</span>
+        <span class="font-medium">STICKY MILK SERIES</span>
+    </button>
+    <button type="button" class="group flex w-full items-center gap-3 rounded-xl px-4 py-3 text-left text-sm" :class="activeTab === 'fruit_soda' ? 'bg-white/10 text-white' : 'text-white/70 hover:bg-white/5 hover:text-white'" x-on:click="activeTab = 'fruit_soda'">
+        <span class="grid h-9 w-9 place-items-center rounded-xl border border-white/10 bg-white/5 text-white/80 group-hover:bg-white/10">D</span>
+        <span class="font-medium">FRUIT SODA SERIES</span>
+    </button>
+    <button type="button" class="group flex w-full items-center gap-3 rounded-xl px-4 py-3 text-left text-sm" :class="activeTab === 'egg_waffle' ? 'bg-white/10 text-white' : 'text-white/70 hover:bg-white/5 hover:text-white'" x-on:click="activeTab = 'egg_waffle'">
+        <span class="grid h-9 w-9 place-items-center rounded-xl border border-white/10 bg-white/5 text-white/80 group-hover:bg-white/10">E</span>
+        <span class="font-medium">EGG WAFFLE</span>
     </button>
 @endsection
 
@@ -35,19 +47,61 @@
                 </a>
             </div>
 
-            <div class="grid grid-cols-2 gap-4 sm:grid-cols-3 lg:grid-cols-4">
-                <template x-for="product in filteredProducts()" :key="product.id">
-                    <button
-                        type="button"
-                        class="group rounded-xl border border-white/10 bg-white/5 p-5 text-left shadow-sm transition hover:bg-white/10"
-                        x-on:click="add(product)"
-                    >
-                        <div class="grid h-10 w-10 place-items-center rounded-xl border border-white/10 bg-white/10 text-white/80">
-                            ☕
-                        </div>
-                        <div class="mt-4 text-sm font-semibold text-white" x-text="product.name"></div>
-                        <div class="mt-1 text-xs text-white/50">₱<span x-text="formatPrice(product.price)"></span></div>
-                    </button>
+            <div class="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3">
+                <template x-for="product in groupedProducts()" :key="product.name">
+                    <div class="rounded-xl border border-white/10 bg-white/5 p-5 shadow-sm">
+                        <!-- Product Image -->
+                        <template x-if="product.image">
+                            <div class="mb-4">
+                                <img 
+                                    :src="'/' + product.image" 
+                                    :alt="product.name"
+                                    class="w-full h-32 object-contain"
+                                    loading="lazy"
+                                    style="image-rendering: -webkit-optimize-contrast; image-rendering: crisp-edges; image-rendering: pixelated;"
+                                />
+                            </div>
+                        </template>
+                        
+                        <!-- Fallback Icon for items without images -->
+                        <template x-if="!product.image">
+                            <div class="grid h-10 w-10 place-items-center rounded-xl border border-white/10 bg-white/10 text-white/80 mb-4">
+                                ☕
+                            </div>
+                        </template>
+                        
+                        <div class="text-sm font-semibold text-white" x-text="product.name"></div>
+                        
+                        <template x-if="product.sizes && product.sizes.length > 1">
+                            <div class="mt-3 space-y-2">
+                                <template x-for="size in product.sizes" :key="size.size">
+                                    <button
+                                        type="button"
+                                        class="w-full rounded-lg border border-white/10 bg-[#111] px-3 py-2 text-left text-xs transition hover:bg-white/10"
+                                        x-on:click="add(product.name, size)"
+                                    >
+                                        <div class="flex items-center justify-between">
+                                            <span class="text-white/80" x-text="size.size"></span>
+                                            <span class="font-semibold text-white">₱<span x-text="formatPrice(size.price)"></span></span>
+                                        </div>
+                                    </button>
+                                </template>
+                            </div>
+                        </template>
+                        
+                        <template x-if="!product.sizes || product.sizes.length === 1">
+                            <button
+                                type="button"
+                                class="mt-3 w-full rounded-lg border border-white/10 bg-[#111] px-3 py-2 text-left text-xs transition hover:bg-white/10"
+                                x-on:click="add(product.name, product.sizes[0])"
+                            >
+                                <div class="flex items-center justify-between">
+                                    <span class="text-white/80" x-text="product.sizes[0]?.size || 'Regular'"></span>
+                                    <span class="font-semibold text-white">₱<span x-text="formatPrice(product.sizes[0]?.price || product.price)"></span></span>
+                                </div>
+                            </button>
+                        </template>
+                    </div>
                 </template>
             </div>
         </div>
@@ -69,13 +123,14 @@
                             <div class="flex items-center justify-between gap-3 rounded-xl border border-white/10 bg-[#111] px-4 py-3">
                                 <div class="min-w-0">
                                     <div class="truncate text-sm font-semibold" x-text="item.name"></div>
+                                    <div class="mt-0.5 text-xs text-white/50" x-text="item.size || 'Regular'"></div>
                                     <div class="mt-0.5 text-xs text-white/50">₱<span x-text="formatPrice(item.price)"></span></div>
                                 </div>
 
                                 <div class="flex items-center gap-2">
-                                    <button type="button" class="grid h-9 w-9 place-items-center rounded-xl border border-white/10 bg-white/5 hover:bg-white/10" x-on:click="decrement(item.product_id)">-</button>
+                                    <button type="button" class="grid h-9 w-9 place-items-center rounded-xl border border-white/10 bg-white/5 hover:bg-white/10" x-on:click="decrement(item.product_id, item.size)">-</button>
                                     <div class="w-8 text-center text-sm font-semibold" x-text="item.quantity"></div>
-                                    <button type="button" class="grid h-9 w-9 place-items-center rounded-xl border border-white/10 bg-white/5 hover:bg-white/10" x-on:click="increment(item.product_id)">+</button>
+                                    <button type="button" class="grid h-9 w-9 place-items-center rounded-xl border border-white/10 bg-white/5 hover:bg-white/10" x-on:click="increment(item.product_id, item.size)">+</button>
                                 </div>
                             </div>
                         </template>
@@ -127,37 +182,57 @@
     <script>
         function posOrder(products) {
             return {
-                activeTab: 'coffee',
+                activeTab: 'milk_tea',
                 products,
                 cart: [],
-                filteredProducts() {
-                    return this.products.filter(p => p.category === this.activeTab);
+                groupedProducts() {
+                    const filtered = this.products.filter(p => p.category === this.activeTab);
+                    const grouped = {};
+                    
+                    filtered.forEach(product => {
+                        const key = product.name;
+                        if (!grouped[key]) {
+                            grouped[key] = {
+                                name: product.name,
+                                image: product.image,
+                                sizes: []
+                            };
+                        }
+                        grouped[key].sizes.push({
+                            id: product.id,
+                            size: product.size || 'Regular',
+                            price: Number(product.price)
+                        });
+                    });
+                    
+                    return Object.values(grouped);
                 },
-                add(product) {
-                    const existing = this.cart.find(i => i.product_id === product.id);
+                add(name, sizeInfo) {
+                    const existing = this.cart.find(i => i.name === name && i.size === sizeInfo.size);
                     if (existing) {
                         existing.quantity += 1;
                         return;
                     }
 
                     this.cart.push({
-                        product_id: product.id,
-                        name: product.name,
-                        price: Number(product.price),
+                        product_id: sizeInfo.id,
+                        name: name,
+                        size: sizeInfo.size,
+                        price: Number(sizeInfo.price),
                         quantity: 1,
                     });
                 },
-                increment(productId) {
-                    const item = this.cart.find(i => i.product_id === productId);
+                increment(productId, size) {
+                    const item = this.cart.find(i => i.product_id === productId && i.size === size);
                     if (!item) return;
                     item.quantity += 1;
                 },
-                decrement(productId) {
-                    const item = this.cart.find(i => i.product_id === productId);
+                decrement(productId, size) {
+                    const item = this.cart.find(i => i.product_id === productId && i.size === size);
                     if (!item) return;
                     item.quantity -= 1;
                     if (item.quantity <= 0) {
-                        this.cart = this.cart.filter(i => i.product_id !== productId);
+                        this.cart = this.cart.filter(i => !(i.product_id === productId && i.size === size));
                     }
                 },
                 clear() {
