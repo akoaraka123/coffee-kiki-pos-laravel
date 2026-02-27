@@ -17,6 +17,19 @@
             </div>
         </div>
 
+        <div class="grid grid-cols-1 gap-4 sm:grid-cols-2">
+            <div class="rounded-xl border border-white/10 bg-white/5 p-5 shadow-sm">
+                <div class="text-xs text-white/50">Today Sales</div>
+                <div class="mt-2 text-2xl font-semibold">₱{{ number_format((float) ($todaySales ?? 0), 2) }}</div>
+                <div class="mt-1 text-xs text-white/35">Paid orders today</div>
+            </div>
+            <div class="rounded-xl border border-white/10 bg-white/5 p-5 shadow-sm">
+                <div class="text-xs text-white/50">Orders Today</div>
+                <div class="mt-2 text-2xl font-semibold">{{ (int) ($todayOrders ?? 0) }}</div>
+                <div class="mt-1 text-xs text-white/35">All statuses today</div>
+            </div>
+        </div>
+
         <div class="overflow-hidden rounded-xl border border-white/10 bg-white/5 shadow-sm">
             <div class="overflow-x-auto">
                 <table class="min-w-full text-left text-sm">

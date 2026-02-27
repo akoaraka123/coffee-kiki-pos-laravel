@@ -3,30 +3,18 @@
 @section('title', 'POS')
 
 @section('pos_sidebar')
-    <button type="button" class="group flex w-full items-center gap-3 rounded-xl px-4 py-3 text-left text-sm" :class="activeTab === 'milk_tea' ? 'bg-white/10 text-white' : 'text-white/70 hover:bg-white/5 hover:text-white'" x-on:click="activeTab = 'milk_tea'" :title="sidebarCollapsed ? 'MILK TEA' : ''">
-        <span class="grid h-9 w-9 place-items-center rounded-xl border border-white/10 bg-white/5 text-white/80 group-hover:bg-white/10">M</span>
-        <span class="font-medium" x-show="!sidebarCollapsed">MILK TEA</span>
-    </button>
-    <button type="button" class="group flex w-full items-center gap-3 rounded-xl px-4 py-3 text-left text-sm" :class="activeTab === 'iced_coffee' ? 'bg-white/10 text-white' : 'text-white/70 hover:bg-white/5 hover:text-white'" x-on:click="activeTab = 'iced_coffee'" :title="sidebarCollapsed ? 'ICED COFFEE' : ''">
-        <span class="grid h-9 w-9 place-items-center rounded-xl border border-white/10 bg-white/5 text-white/80 group-hover:bg-white/10">I</span>
-        <span class="font-medium" x-show="!sidebarCollapsed">ICED COFFEE</span>
-    </button>
-    <button type="button" class="group flex w-full items-center gap-3 rounded-xl px-4 py-3 text-left text-sm" :class="activeTab === 'milky_fruit_jam' ? 'bg-white/10 text-white' : 'text-white/70 hover:bg-white/5 hover:text-white'" x-on:click="activeTab = 'milky_fruit_jam'" :title="sidebarCollapsed ? 'MILKY FRUIT JAM SERIES' : ''">
-        <span class="grid h-9 w-9 place-items-center rounded-xl border border-white/10 bg-white/5 text-white/80 group-hover:bg-white/10">F</span>
-        <span class="font-medium" x-show="!sidebarCollapsed">MILKY FRUIT JAM SERIES</span>
-    </button>
-    <button type="button" class="group flex w-full items-center gap-3 rounded-xl px-4 py-3 text-left text-sm" :class="activeTab === 'sticky_milk' ? 'bg-white/10 text-white' : 'text-white/70 hover:bg-white/5 hover:text-white'" x-on:click="activeTab = 'sticky_milk'" :title="sidebarCollapsed ? 'STICKY MILK SERIES' : ''">
-        <span class="grid h-9 w-9 place-items-center rounded-xl border border-white/10 bg-white/5 text-white/80 group-hover:bg-white/10">S</span>
-        <span class="font-medium" x-show="!sidebarCollapsed">STICKY MILK SERIES</span>
-    </button>
-    <button type="button" class="group flex w-full items-center gap-3 rounded-xl px-4 py-3 text-left text-sm" :class="activeTab === 'fruit_soda' ? 'bg-white/10 text-white' : 'text-white/70 hover:bg-white/5 hover:text-white'" x-on:click="activeTab = 'fruit_soda'" :title="sidebarCollapsed ? 'FRUIT SODA SERIES' : ''">
-        <span class="grid h-9 w-9 place-items-center rounded-xl border border-white/10 bg-white/5 text-white/80 group-hover:bg-white/10">D</span>
-        <span class="font-medium" x-show="!sidebarCollapsed">FRUIT SODA SERIES</span>
-    </button>
-    <button type="button" class="group flex w-full items-center gap-3 rounded-xl px-4 py-3 text-left text-sm" :class="activeTab === 'egg_waffle' ? 'bg-white/10 text-white' : 'text-white/70 hover:bg-white/5 hover:text-white'" x-on:click="activeTab = 'egg_waffle'" :title="sidebarCollapsed ? 'EGG WAFFLE' : ''">
-        <span class="grid h-9 w-9 place-items-center rounded-xl border border-white/10 bg-white/5 text-white/80 group-hover:bg-white/10">E</span>
-        <span class="font-medium" x-show="!sidebarCollapsed">EGG WAFFLE</span>
-    </button>
+    <template x-for="cat in categories()" :key="cat.key">
+        <button
+            type="button"
+            class="group flex w-full items-center gap-3 rounded-xl px-4 py-3 text-left text-sm"
+            :class="activeTab === cat.key ? 'bg-white/10 text-white' : 'text-white/70 hover:bg-white/5 hover:text-white'"
+            x-on:click="activeTab = cat.key"
+            :title="sidebarCollapsed ? cat.label : ''"
+        >
+            <span class="grid h-9 w-9 place-items-center rounded-xl border border-white/10 bg-white/5 text-white/80 group-hover:bg-white/10" x-text="cat.icon"></span>
+            <span class="font-medium" x-show="!sidebarCollapsed" x-text="cat.label"></span>
+        </button>
+    </template>
 @endsection
 
 @section('x-data')
@@ -34,11 +22,11 @@
 @endsection
 
 @section('content')
-    <div class="grid grid-cols-1 gap-6 xl:grid-cols-[1fr_360px]">
+    <div class="grid grid-cols-1 gap-6 xl:grid-cols-[1fr_360px] h-[calc(100vh-120px)] overflow-hidden">
         <script>
-            window.__assetBaseUrl = @js(asset(''));
+            window.__assetBaseUrl = @js(rtrim(asset(''), '/') . '/');
         </script>
-        <div class="space-y-4">
+        <div class="space-y-4 overflow-y-auto pr-2 min-h-0">
             <div class="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
                 <div>
                     <div class="text-sm font-semibold">Menu</div>
@@ -50,66 +38,62 @@
                 </a>
             </div>
 
+            <div class="mt-4 mb-5">
+                <div class="relative">
+                    <input
+                        type="text"
+                        placeholder="Search drinks…"
+                        x-model.debounce.150ms="searchQuery"
+                        class="w-full rounded-xl bg-white/5 border border-white/10 px-4 py-3 pl-11 text-white placeholder-white/40 focus:outline-none focus:ring-2 focus:ring-white/20"
+                    />
+                    <svg class="absolute left-4 top-1/2 -translate-y-1/2 h-5 w-5 text-white/40" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg" aria-hidden="true">
+                        <path d="M10.5 18a7.5 7.5 0 1 1 0-15 7.5 7.5 0 0 1 0 15Z" stroke="currentColor" stroke-width="1.8" />
+                        <path d="M16.3 16.3 21 21" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" />
+                    </svg>
+                </div>
+            </div>
+
             <div class="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3">
                 <template x-for="product in groupedProducts()" :key="product.name">
-                    <div class="rounded-xl border border-white/10 bg-white/5 p-5 shadow-sm">
-                        <div class="text-lg font-bold tracking-wide text-white" x-text="product.name"></div>
+                    <div
+                        class="group rounded-2xl border border-white/10 bg-white/5 shadow-lg hover:bg-white/10 transition p-5 flex flex-col h-full"
+                        :id="productCardId(product.name)"
+                        :data-name="product.name"
+                        :data-category="product.category"
+                        :class="focusedProductName && focusedProductName === product.name ? 'ring-2 ring-white/20' : ''"
+                    >
+                        <h3 class="text-xl font-semibold tracking-wide text-white mb-2" x-text="product.name"></h3>
 
-                        <!-- Product Image -->
-                        <template x-if="product.image">
-                            <div class="mt-3 mb-4">
-                                <img 
-                                    :src="(window.__assetBaseUrl || '/') + product.image" 
-                                    :alt="product.name"
-                                    class="w-full h-36 rounded-xl object-contain"
-                                    loading="lazy"
-                                    style="image-rendering: -webkit-optimize-contrast;"
-                                />
-                            </div>
-                        </template>
-                        
-                        <!-- Fallback Icon for items without images -->
-                        <template x-if="!product.image">
-                            <div class="mt-3 grid h-10 w-10 place-items-center rounded-xl border border-white/10 bg-white/10 text-white/80 mb-4">
-                                ☕
-                            </div>
-                        </template>
+                        <div class="flex items-start justify-center pt-2">
+                            <img
+                                :src="product.image ? ((window.__assetBaseUrl || '/') + product.image) : ((window.__assetBaseUrl || '/') + 'images/coffee-doodle.png')"
+                                :alt="product.name"
+                                x-on:error="if (!$el.dataset.fallbackTried) { $el.dataset.fallbackTried = '1'; $el.src = (window.__assetBaseUrl || '/') + 'images/coffee-doodle.png'; }"
+                                class="max-h-60 w-auto object-contain drop-shadow-xl"
+                                loading="lazy"
+                                style="image-rendering: -webkit-optimize-contrast;"
+                            />
+                        </div>
 
-                        <template x-if="product.sizes && product.sizes.length > 1">
-                            <div class="mt-3 space-y-2">
-                                <template x-for="size in product.sizes" :key="size.size">
-                                    <button
-                                        type="button"
-                                        class="w-full rounded-lg border border-white/10 bg-[#111] px-4 py-3 text-left text-base font-semibold transition hover:bg-white/10"
-                                        x-on:click="add(product.name, size)"
-                                    >
-                                        <div class="flex items-center justify-between">
-                                            <span class="text-white/90" x-text="size.size"></span>
-                                            <span class="text-white">₱<span x-text="formatPrice(size.price)"></span></span>
-                                        </div>
-                                    </button>
-                                </template>
-                            </div>
-                        </template>
-                        
-                        <template x-if="!product.sizes || product.sizes.length === 1">
-                            <button
-                                type="button"
-                                class="mt-3 w-full rounded-lg border border-white/10 bg-[#111] px-4 py-3 text-left text-base font-semibold transition hover:bg-white/10"
-                                x-on:click="add(product.name, product.sizes[0])"
-                            >
-                                <div class="flex items-center justify-between">
-                                    <span class="text-white/90" x-text="product.sizes[0]?.size || 'Regular'"></span>
-                                    <span class="text-white">₱<span x-text="formatPrice(product.sizes[0]?.price || product.price)"></span></span>
-                                </div>
-                            </button>
-                        </template>
+                        <div class="mt-3 space-y-2">
+                            <template x-for="size in product.sizes" :key="size.size">
+                                <button
+                                    type="button"
+                                    class="w-full flex items-center justify-between px-4 py-3 rounded-xl bg-black/40 border border-white/10 hover:bg-black/60 transition text-white text-lg font-medium"
+                                    x-on:click="add(product.name, size)"
+                                >
+                                    <span x-text="size.size"></span>
+                                    <span>₱<span x-text="formatPrice(size.price)"></span></span>
+                                </button>
+                            </template>
+                        </div>
                     </div>
                 </template>
             </div>
         </div>
 
-        <div class="rounded-xl border border-white/10 bg-white/5 p-5 shadow-sm">
+        <div class="sticky top-6 self-start h-[calc(100vh-160px)]">
+            <div class="rounded-xl border border-white/10 bg-white/5 p-5 shadow-sm">
             <div class="text-sm font-semibold">Current Order</div>
 
             <div class="mt-4">
@@ -180,6 +164,7 @@
                     Clear Order
                 </button>
             </form>
+            </div>
         </div>
     </div>
 
@@ -191,9 +176,46 @@
                 sidebarCollapsed: false,
                 hoverOpened: false,
                 activeTab: 'milk_tea',
+                searchQuery: '',
+                focusedProductName: '',
                 products,
                 cart: [],
+                normalizeCategory(value) {
+                    return String(value || '')
+                        .trim()
+                        .toLowerCase()
+                        .replace(/\s+/g, '_')
+                        .replace(/-+/g, '_');
+                },
+                displayCategory(value) {
+                    const v = String(value || '').trim();
+                    if (!v) return 'UNCATEGORIZED';
+                    return v
+                        .replace(/[_-]+/g, ' ')
+                        .replace(/\s+/g, ' ')
+                        .trim()
+                        .toUpperCase();
+                },
+                categories() {
+                    const map = new Map();
+                    (this.products || []).forEach(p => {
+                        const raw = p?.category;
+                        const key = this.normalizeCategory(raw);
+                        if (!key) return;
+                        if (!map.has(key)) {
+                            const label = this.displayCategory(raw);
+                            const icon = (label || 'C').trim().charAt(0) || 'C';
+                            map.set(key, { key, label, icon });
+                        }
+                    });
+                    return Array.from(map.values());
+                },
                 init() {
+                    const cats = this.categories();
+                    if (cats.length > 0 && !cats.some(c => c.key === this.activeTab)) {
+                        this.activeTab = cats[0].key;
+                    }
+
                     window.addEventListener('resize', () => {
                         this.isDesktop = window.innerWidth >= 1024;
                         if (this.isDesktop) {
@@ -215,6 +237,34 @@
                     } catch (e) {
                         // ignore
                     }
+
+                    this.$watch('searchQuery', (value) => {
+                        const q = (value || '').trim().toLowerCase();
+                        if (!q) {
+                            this.focusedProductName = '';
+                            return;
+                        }
+
+                        const match = this.products.find(p => String(p.name || '').toLowerCase().includes(q));
+                        if (!match) {
+                            this.focusedProductName = '';
+                            return;
+                        }
+
+                        this.focusedProductName = match.name;
+
+                        const matchCategory = this.normalizeCategory(match.category);
+                        if (matchCategory && matchCategory !== this.activeTab) {
+                            this.activeTab = matchCategory;
+                        }
+
+                        this.$nextTick(() => {
+                            const el = document.getElementById(this.productCardId(match.name));
+                            if (el && typeof el.scrollIntoView === 'function') {
+                                el.scrollIntoView({ block: 'nearest', inline: 'nearest', behavior: 'smooth' });
+                            }
+                        });
+                    });
                 },
                 toggleSidebar() {
                     if (this.isDesktop) {
@@ -225,8 +275,20 @@
                     }
                     this.sidebarOpen = !this.sidebarOpen;
                 },
+                productCardId(name) {
+                    return 'pos-product-' + String(name || '')
+                        .toLowerCase()
+                        .trim()
+                        .replace(/[^a-z0-9]+/g, '-')
+                        .replace(/(^-|-$)/g, '');
+                },
                 groupedProducts() {
-                    const filtered = this.products.filter(p => p.category === this.activeTab);
+                    const q = (this.searchQuery || '').trim().toLowerCase();
+                    const filtered = this.products.filter(p => {
+                        if (this.normalizeCategory(p.category) !== this.activeTab) return false;
+                        if (!q) return true;
+                        return String(p.name || '').toLowerCase().includes(q);
+                    });
                     const grouped = {};
                     
                     filtered.forEach(product => {
@@ -235,6 +297,7 @@
                             grouped[key] = {
                                 name: product.name,
                                 image: product.image,
+                                category: this.normalizeCategory(product.category),
                                 sizes: []
                             };
                         }

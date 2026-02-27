@@ -5,6 +5,7 @@ namespace App\Http\Controllers;
 use App\Models\Order;
 use App\Models\OrderItem;
 use App\Models\Product;
+use Carbon\Carbon;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
@@ -16,10 +17,38 @@ class OrderController extends Controller
 {
     public function index(Request $request): View
     {
+        $user = $request->user();
+        $userId = $user?->id;
+
+        $ordersQuery = Order::query()->latest();
+        if ($userId) {
+            $ordersQuery->where('created_by', $userId);
+        }
+
+        $start = Carbon::today();
+        $end = Carbon::tomorrow();
+
+        $todaySales = 0.0;
+        $todayOrders = 0;
+        if ($userId) {
+            $todaySales = (float) Order::query()
+                ->where('created_by', $userId)
+                ->where('status', 'paid')
+                ->where('created_at', '>=', $start)
+                ->where('created_at', '<', $end)
+                ->sum('total');
+
+            $todayOrders = (int) Order::query()
+                ->where('created_by', $userId)
+                ->where('created_at', '>=', $start)
+                ->where('created_at', '<', $end)
+                ->count();
+        }
+
         return view('orders.index', [
-            'orders' => Order::query()
-                ->latest()
-                ->paginate(10),
+            'orders' => $ordersQuery->paginate(10),
+            'todaySales' => $todaySales,
+            'todayOrders' => $todayOrders,
         ]);
     }
 

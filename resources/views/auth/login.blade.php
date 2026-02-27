@@ -68,7 +68,7 @@
                         <img
                             src="{{ asset('images/khopi-kiki-logo.png') }}"
                             alt="KHOPI KIKI Logo"
-                            class="h-32 w-32 sm:h-36 sm:w-36 object-contain drop-shadow-2xl"
+                            class="h-36 w-36 min-h-[9rem] min-w-[9rem] sm:h-40 sm:w-40 object-contain drop-shadow-2xl"
                             draggable="false"
                         >
                     </div>
