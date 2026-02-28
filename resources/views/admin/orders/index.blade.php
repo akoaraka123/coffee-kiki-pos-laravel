@@ -43,43 +43,34 @@
                 <table class="min-w-full text-left text-sm">
                     <thead class="bg-white/5 text-white/70">
                         <tr>
-                            <th class="px-5 py-4 font-medium">Order #</th>
+                            <th class="px-5 py-4 font-medium">Date</th>
                             <th class="px-5 py-4 font-medium">Staff</th>
-                            <th class="px-5 py-4 font-medium">Customer</th>
-                            <th class="px-5 py-4 font-medium">Items</th>
-                            <th class="px-5 py-4 font-medium">Total</th>
-                            <th class="px-5 py-4 font-medium">Status</th>
-                            <th class="px-5 py-4 font-medium">Created</th>
+                            <th class="px-5 py-4 font-medium">Total Orders</th>
+                            <th class="px-5 py-4 font-medium">Total Items</th>
+                            <th class="px-5 py-4 font-medium">Total Sales</th>
+                            <th class="px-5 py-4 font-medium">Action</th>
                         </tr>
                     </thead>
                     <tbody class="divide-y divide-white/10">
-                        @forelse ($orders as $order)
+                        @forelse ($summaries as $row)
                             <tr>
-                                <td class="px-5 py-4 font-medium">{{ $order->order_number }}</td>
-                                <td class="px-5 py-4 text-white/70">{{ $order->creator?->name ?? '—' }}</td>
-                                <td class="px-5 py-4 text-white/70">{{ $order->customer_name ?? '—' }}</td>
+                                <td class="px-5 py-4 font-medium">{{ $row['date'] }}</td>
+                                <td class="px-5 py-4 text-white/70">{{ $row['staff_name'] }}</td>
+                                <td class="px-5 py-4 text-white/70">{{ number_format((int) $row['total_orders']) }}</td>
+                                <td class="px-5 py-4 text-white/70">{{ number_format((int) $row['total_items']) }}</td>
+                                <td class="px-5 py-4">₱{{ number_format((float) $row['total_sales'], 2) }}</td>
                                 <td class="px-5 py-4">
-                                    <div class="space-y-1">
-                                        @foreach ($order->items as $item)
-                                            <div class="text-xs text-white/70">
-                                                <span class="font-semibold text-white/80">{{ $item->quantity }}x</span>
-                                                {{ $item->name }}
-                                                <span class="text-white/40">(₱{{ number_format((float) $item->price, 2) }})</span>
-                                            </div>
-                                        @endforeach
-                                    </div>
+                                    <a
+                                        href="{{ route('admin.orders.details', ['staff' => $row['staff_id'], 'date' => $row['date']]) }}"
+                                        class="inline-flex items-center justify-center rounded-xl border border-white/10 bg-white/5 px-4 py-2 text-xs font-semibold text-white/80 shadow-sm hover:bg-white/10"
+                                    >
+                                        View
+                                    </a>
                                 </td>
-                                <td class="px-5 py-4">{{ number_format((float) $order->total, 2) }}</td>
-                                <td class="px-5 py-4">
-                                    <span class="inline-flex items-center rounded-full border border-white/10 bg-white/5 px-3 py-1 text-xs text-white/80">
-                                        {{ $order->status }}
-                                    </span>
-                                </td>
-                                <td class="px-5 py-4 text-white/70">{{ $order->created_at->format('Y-m-d H:i') }}</td>
                             </tr>
                         @empty
                             <tr>
-                                <td class="px-5 py-6 text-white/60" colspan="7">No orders found.</td>
+                                <td class="px-5 py-6 text-white/60" colspan="6">No orders found.</td>
                             </tr>
                         @endforelse
                     </tbody>
@@ -88,7 +79,7 @@
         </div>
 
         <div>
-            {{ $orders->links() }}
+            {{ $summaries->links() }}
         </div>
     </div>
 @endsection

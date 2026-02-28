@@ -87,6 +87,9 @@ class OrderController extends Controller
             'customer_name' => ['nullable', 'string', 'max:255'],
             'status' => ['required', 'string', 'in:pending,paid,cancelled'],
             'items' => ['required', 'string'],
+            'payment_type' => ['required', 'string', 'in:cash,gcash'],
+            'cash_received' => ['nullable', 'numeric', 'min:0'],
+            'total_amount' => ['required', 'numeric', 'min:0'],
         ]);
 
         $items = json_decode($validated['items'], true);
@@ -144,14 +147,39 @@ class OrderController extends Controller
             ])->withInput();
         }
 
+        $paymentType = $validated['payment_type'];
+        $cashReceived = isset($validated['cash_received']) ? (float) $validated['cash_received'] : null;
+        $changeAmount = 0.0;
+
+        if ($paymentType === 'cash') {
+            $cash = (float) ($cashReceived ?? 0);
+            if ($cash <= 0) {
+                return back()->withErrors([
+                    'cash_received' => 'Please enter cash received.',
+                ])->withInput();
+            }
+
+            if ($cash < $total) {
+                return back()->withErrors([
+                    'cash_received' => 'Insufficient payment amount.',
+                ])->withInput();
+            }
+
+            $changeAmount = $cash - $total;
+        }
+
         $order = null;
 
-        DB::transaction(function () use ($request, $validated, $total, $itemsToInsert, &$order): void {
+        DB::transaction(function () use ($request, $validated, $total, $itemsToInsert, $paymentType, $cashReceived, $changeAmount, &$order): void {
             $order = Order::create([
                 'order_number' => $this->generateOrderNumber(),
                 'customer_name' => $validated['customer_name'] ?? null,
+                'total_amount' => $total,
                 'total' => $total,
                 'status' => $validated['status'],
+                'payment_type' => $paymentType,
+                'cash_received' => $paymentType === 'cash' ? $cashReceived : null,
+                'change_amount' => $paymentType === 'cash' ? $changeAmount : 0,
                 'created_by' => $request->user()->id,
             ]);
 

@@ -137,6 +137,9 @@
                 @csrf
                 <input type="hidden" name="status" value="paid" />
                 <input type="hidden" name="items" x-bind:value="JSON.stringify(payloadItems())" />
+                <input type="hidden" name="payment_type" x-bind:value="paymentType" />
+                <input type="hidden" name="total_amount" x-bind:value="formatPrice(total())" />
+                <input type="hidden" name="cash_received" x-bind:value="paymentType === 'cash' ? cashReceived : ''" />
 
                 <input
                     type="text"
@@ -146,11 +149,55 @@
                     value="{{ old('customer_name') }}"
                 />
 
+                <div class="space-y-2">
+                    <label class="text-xs font-semibold text-white/60">Payment Type</label>
+                    <div class="grid grid-cols-2 gap-2">
+                        <button
+                            type="button"
+                            class="rounded-xl border px-4 py-3 text-sm font-semibold transition"
+                            x-on:click="paymentType = 'cash'"
+                            x-bind:class="paymentType === 'cash' ? 'border-white/10 bg-white/10 text-white' : 'border-white/10 bg-white/5 text-white/70 hover:bg-white/10 hover:text-white'"
+                        >
+                            Cash
+                        </button>
+                        <button
+                            type="button"
+                            class="rounded-xl border px-4 py-3 text-sm font-semibold transition"
+                            x-on:click="paymentType = 'gcash'"
+                            x-bind:class="paymentType === 'gcash' ? 'border-white/10 bg-white/10 text-white' : 'border-white/10 bg-white/5 text-white/70 hover:bg-white/10 hover:text-white'"
+                        >
+                            GCash
+                        </button>
+                    </div>
+                </div>
+
+                <div class="space-y-2" x-show="paymentType === 'cash'" x-cloak>
+                    <label class="text-xs font-semibold text-white/60">Cash Received</label>
+                    <input
+                        type="number"
+                        inputmode="decimal"
+                        step="0.01"
+                        min="0"
+                        placeholder="Enter cash amount"
+                        class="w-full rounded-xl border border-white/10 bg-[#111] px-4 py-3 text-sm text-white placeholder:text-white/30 focus:outline-none focus:ring-2 focus:ring-white/20"
+                        x-model="cashReceived"
+                    />
+
+                    <div class="rounded-xl border border-white/10 bg-white/5 px-4 py-3 text-sm" x-show="cashReceived !== ''">
+                        <div class="flex items-center justify-between text-white/70">
+                            <span>Change</span>
+                            <span class="font-semibold text-white">₱<span x-text="formatPrice(changeAmount())"></span></span>
+                        </div>
+                        <div class="mt-1 text-xs text-white/40" x-show="Number(cashReceived || 0) < Number(total() || 0)">Insufficient payment amount.</div>
+                    </div>
+                </div>
+
                 <button
-                    type="submit"
+                    type="button"
                     class="w-full rounded-full bg-[#efe9df] px-4 py-3 text-sm font-semibold text-[#1c1c1c] shadow-lg hover:opacity-95 active:opacity-90"
                     x-bind:disabled="cart.length === 0"
                     x-bind:class="cart.length === 0 ? 'opacity-50 cursor-not-allowed' : ''"
+                    x-on:click="startCheckout()"
                 >
                     Checkout
                 </button>
@@ -168,6 +215,49 @@
         </div>
     </div>
 
+    <div class="fixed inset-0 z-50" x-show="checkoutModal" x-cloak>
+        <div class="absolute inset-0 bg-black/70" x-transition.opacity x-on:click="checkoutModal = false"></div>
+        <div class="absolute inset-0 grid place-items-center px-4">
+            <div class="w-full max-w-md rounded-2xl border border-white/10 bg-[#111] p-6 shadow-2xl" x-transition>
+                <div class="text-lg font-semibold">Confirm Checkout</div>
+                <div class="mt-1 text-sm text-white/60">Review the payment details before saving.</div>
+
+                <div class="mt-5 space-y-3">
+                    <div class="flex items-center justify-between text-sm">
+                        <span class="text-white/70">Total</span>
+                        <span class="font-semibold">₱<span x-text="formatPrice(total())"></span></span>
+                    </div>
+                    <div class="flex items-center justify-between text-sm">
+                        <span class="text-white/70">Payment</span>
+                        <span class="font-semibold" x-text="paymentType === 'cash' ? 'Cash' : 'GCash'"></span>
+                    </div>
+                    <div class="flex items-center justify-between text-sm" x-show="paymentType === 'cash'">
+                        <span class="text-white/70">Cash Received</span>
+                        <span class="font-semibold">₱<span x-text="formatPrice(Number(cashReceived || 0))"></span></span>
+                    </div>
+                    <div class="flex items-center justify-between text-sm" x-show="paymentType === 'cash'">
+                        <span class="text-white/70">Change</span>
+                        <span class="font-semibold">₱<span x-text="formatPrice(changeAmount())"></span></span>
+                    </div>
+
+                    <div class="rounded-xl border border-rose-500/30 bg-rose-500/10 px-4 py-3 text-sm text-rose-200" x-show="checkoutError">
+                        <div class="font-semibold">Action failed</div>
+                        <div class="mt-1" x-text="checkoutError"></div>
+                    </div>
+                </div>
+
+                <div class="mt-6 flex items-center justify-end gap-3">
+                    <button type="button" class="inline-flex items-center justify-center rounded-xl border border-white/10 bg-white/5 px-4 py-2 text-sm font-semibold text-white/80 hover:bg-white/10" x-on:click="checkoutModal = false">
+                        Cancel
+                    </button>
+                    <button type="button" class="inline-flex items-center justify-center rounded-xl bg-[#efe9df] px-4 py-2 text-sm font-semibold text-[#1c1c1c] shadow-sm hover:opacity-95" x-on:click="confirmCheckout()">
+                        Confirm
+                    </button>
+                </div>
+            </div>
+        </div>
+    </div>
+
     <script>
         function posOrder(products) {
             return {
@@ -180,6 +270,10 @@
                 focusedProductName: '',
                 products,
                 cart: [],
+                paymentType: 'cash',
+                cashReceived: '',
+                checkoutModal: false,
+                checkoutError: '',
                 normalizeCategory(value) {
                     return String(value || '')
                         .trim()
@@ -363,8 +457,58 @@
                     }));
                 },
                 formatPrice(value) {
-                    const num = Number(value || 0);
-                    return num.toFixed(2);
+                    const n = Number(value || 0);
+                    return n.toFixed(2);
+                },
+                changeAmount() {
+                    const total = Number(this.total() || 0);
+                    const cash = Number(this.cashReceived || 0);
+                    const diff = cash - total;
+                    return diff > 0 ? diff : 0;
+                },
+                startCheckout() {
+                    this.checkoutError = '';
+                    if (this.cart.length === 0) return;
+
+                    const total = Number(this.total() || 0);
+
+                    if (this.paymentType === 'cash') {
+                        const cash = Number(this.cashReceived || 0);
+                        if (!Number.isFinite(cash) || cash <= 0) {
+                            this.checkoutError = 'Please enter cash received.';
+                            this.checkoutModal = true;
+                            return;
+                        }
+
+                        if (cash < total) {
+                            this.checkoutError = 'Insufficient payment amount.';
+                            this.checkoutModal = true;
+                            return;
+                        }
+                    }
+
+                    this.checkoutModal = true;
+                },
+                confirmCheckout() {
+                    this.checkoutError = '';
+                    const total = Number(this.total() || 0);
+
+                    if (this.paymentType === 'cash') {
+                        const cash = Number(this.cashReceived || 0);
+                        if (!Number.isFinite(cash) || cash <= 0) {
+                            this.checkoutError = 'Please enter cash received.';
+                            return;
+                        }
+                        if (cash < total) {
+                            this.checkoutError = 'Insufficient payment amount.';
+                            return;
+                        }
+                    }
+
+                    this.$nextTick(() => {
+                        const form = this.$root.querySelector('form[action="{{ route('orders.store') }}"]');
+                        if (form) form.submit();
+                    });
                 },
             }
         }

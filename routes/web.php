@@ -33,6 +33,7 @@ Route::prefix('admin')
         Route::get('/dashboard', AdminDashboardController::class)->name('dashboard');
 
         Route::get('/orders', [AdminOrderController::class, 'index'])->name('orders.index');
+        Route::get('/orders/details', [AdminOrderController::class, 'details'])->name('orders.details');
 
         Route::get('/products', [AdminProductController::class, 'index'])->name('products.index');
         Route::get('/products/create', [AdminProductController::class, 'create'])->name('products.create');
