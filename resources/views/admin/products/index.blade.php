@@ -85,11 +85,11 @@
                     </div>
 
                     <div class="mt-4 flex items-center justify-end gap-4">
-                        <a :href="item.editUrl" class="text-xs text-white/70 hover:text-white underline decoration-white/20">Edit</a>
+                        <a :href="item.editUrl" class="inline-flex items-center px-3 py-2 rounded-lg bg-white/10 text-white/70 hover:bg-white/20 hover:text-white font-medium text-sm transition">Edit</a>
                         <form method="POST" :action="item.deleteUrl" x-on:submit.prevent="confirmDelete($event)">
                             @csrf
                             @method('DELETE')
-                            <button type="submit" class="text-xs text-rose-300 hover:text-rose-200 underline decoration-rose-300/30">Delete</button>
+                            <button type="submit" class="inline-flex items-center px-3 py-2 rounded-lg bg-rose-500/10 text-rose-300 hover:bg-rose-500/20 hover:text-rose-200 font-medium text-sm transition">Delete</button>
                         </form>
                     </div>
                 </div>
@@ -158,7 +158,7 @@
                     });
                 },
                 confirmDelete(e) {
-                    const ok = confirm('Delete this product?');
+                    const ok = confirm('Are you sure you want to delete this product?');
                     if (!ok) return;
                     e.target.submit();
                 },

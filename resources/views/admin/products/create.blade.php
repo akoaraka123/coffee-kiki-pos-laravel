@@ -11,7 +11,19 @@
         <a href="{{ route('admin.products.index') }}" class="text-sm text-white/70 hover:text-white underline decoration-white/20">Back</a>
     </div>
 
-    <form method="POST" action="{{ route('admin.products.store') }}" enctype="multipart/form-data" class="mt-6 space-y-5 rounded-[24px] border border-white/10 bg-white/5 p-6" x-data="{ category: @js(old('category', $categories->first() ?? '')), newCategory: @js(old('new_category', '')) }">
+    @php
+        $oldSizes = old('sizes', ['12oz', '16oz', '22oz']);
+        $oldPrices = old('prices', ['', '', '']);
+        $initialRows = [];
+        for ($i = 0; $i < max(count($oldSizes), 3); $i++) {
+            $initialRows[] = [
+                'size' => $oldSizes[$i] ?? '',
+                'price' => $oldPrices[$i] ?? '',
+            ];
+        }
+    @endphp
+
+    <form method="POST" action="{{ route('admin.products.store') }}" enctype="multipart/form-data" class="mt-6 space-y-5 rounded-[24px] border border-white/10 bg-white/5 p-6" x-data="createProductForm({ category: @js(old('category', $categories->first() ?? '')), newCategory: @js(old('new_category', '')), sizes: @js($initialRows) })">
         @csrf
 
         <div class="grid grid-cols-1 gap-4 sm:grid-cols-2">
@@ -45,21 +57,31 @@
             </div>
 
             <div class="sm:col-span-2">
-                <label class="text-xs text-white/60">Sizes & Prices</label>
-                <div class="mt-2 space-y-3">
-                    @php
-                        $oldSizes = old('sizes', ['12oz', '16oz', '22oz']);
-                        $oldPrices = old('prices', ['', '', '']);
-                    @endphp
-
-                    @for ($i = 0; $i < max(count($oldSizes), 3); $i++)
-                        <div class="grid grid-cols-1 gap-3 sm:grid-cols-2">
-                            <input name="sizes[]" value="{{ $oldSizes[$i] ?? '' }}" placeholder="Size (e.g. 12oz)" class="w-full rounded-2xl border border-white/10 bg-[#1b1b1b] px-4 py-3 text-white placeholder:text-white/30 focus:outline-none focus:ring-2 focus:ring-white/20" />
-                            <input name="prices[]" value="{{ $oldPrices[$i] ?? '' }}" placeholder="Price (e.g. 39)" inputmode="decimal" class="w-full rounded-2xl border border-white/10 bg-[#1b1b1b] px-4 py-3 text-white placeholder:text-white/30 focus:outline-none focus:ring-2 focus:ring-white/20" />
-                        </div>
-                    @endfor
+                <div class="flex items-center justify-between gap-3">
+                    <label class="text-xs text-white/60">Sizes & Prices</label>
+                    <button type="button" class="inline-flex items-center justify-center rounded-xl border border-white/10 bg-white/5 px-3 py-2 text-xs font-semibold text-white/80 hover:bg-white/10" x-on:click="addSize()">
+                        Add Size
+                    </button>
                 </div>
-                <div class="mt-2 text-xs text-white/40">Add more sizes by duplicating rows after saving, or fill only the rows you need.</div>
+
+                <div class="mt-2 space-y-3">
+                    <template x-for="(row, idx) in sizes" :key="idx">
+                        <div class="grid grid-cols-1 gap-3 sm:grid-cols-[1fr_1fr_auto] sm:items-start">
+                            <div>
+                                <input name="sizes[]" x-model="row.size" placeholder="OZ label (e.g. 12oz)" class="w-full rounded-2xl border border-white/10 bg-[#1b1b1b] px-4 py-3 text-white placeholder:text-white/30 focus:outline-none focus:ring-2 focus:ring-white/20" />
+                            </div>
+                            <div>
+                                <input name="prices[]" x-model="row.price" placeholder="Price (e.g. 39)" inputmode="decimal" class="w-full rounded-2xl border border-white/10 bg-[#1b1b1b] px-4 py-3 text-white placeholder:text-white/30 focus:outline-none focus:ring-2 focus:ring-white/20" />
+                            </div>
+                            <div class="flex justify-end">
+                                <button type="button" class="inline-flex h-[46px] items-center justify-center rounded-2xl border border-rose-500/30 bg-rose-500/10 px-4 text-sm font-semibold text-rose-200 hover:bg-rose-500/20" x-on:click="removeSize(idx)" x-bind:disabled="sizes.length === 1" x-bind:class="sizes.length === 1 ? 'opacity-50 cursor-not-allowed' : ''">
+                                    Delete
+                                </button>
+                            </div>
+                        </div>
+                    </template>
+                </div>
+                <div class="mt-2 text-xs text-white/40">Add, edit, or delete OZ rows. Then create the product.</div>
             </div>
 
             <div class="sm:col-span-2">
@@ -77,4 +99,23 @@
             </button>
         </div>
     </form>
+
+    <script>
+        function createProductForm(payload) {
+            return {
+                category: payload?.category ?? '',
+                newCategory: payload?.newCategory ?? '',
+                sizes: Array.isArray(payload?.sizes) && payload.sizes.length > 0 ? payload.sizes : [{ size: '', price: '' }],
+                addSize() {
+                    this.sizes.push({ size: '', price: '' });
+                },
+                removeSize(idx) {
+                    if (this.sizes.length <= 1) return;
+                    const ok = confirm('Are you sure you want to delete this size?');
+                    if (!ok) return;
+                    this.sizes.splice(idx, 1);
+                },
+            }
+        }
+    </script>
 @endsection

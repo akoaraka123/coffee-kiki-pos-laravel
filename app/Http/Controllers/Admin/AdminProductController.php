@@ -80,7 +80,7 @@ class AdminProductController extends Controller
             'sizes' => ['required', 'array', 'min:1'],
             'sizes.*' => ['nullable', 'string', 'max:50'],
             'prices' => ['required', 'array', 'min:1'],
-            'prices.*' => ['required', 'numeric', 'min:0'],
+            'prices.*' => ['nullable', 'numeric', 'min:0'],
         ]);
 
         $isActive = $request->has('is_active') ? $request->boolean('is_active') : true;
@@ -178,7 +178,7 @@ class AdminProductController extends Controller
             'sizes' => ['required', 'array', 'min:1'],
             'sizes.*' => ['nullable', 'string', 'max:50'],
             'prices' => ['required', 'array', 'min:1'],
-            'prices.*' => ['required', 'numeric', 'min:0'],
+            'prices.*' => ['nullable', 'numeric', 'min:0'],
         ]);
 
         $isActive = $request->has('is_active') ? $request->boolean('is_active') : false;
