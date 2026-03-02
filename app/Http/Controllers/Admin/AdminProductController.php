@@ -8,6 +8,7 @@ use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Storage;
+use Illuminate\Http\JsonResponse;
 use Illuminate\Support\Str;
 use Illuminate\View\View;
 
@@ -90,6 +91,15 @@ class AdminProductController extends Controller
             $category = trim((string) ($validated['category'] ?? ''));
         }
         if ($category === '') {
+            if ($request->expectsJson()) {
+                return response()->json([
+                    'message' => 'The given data was invalid.',
+                    'errors' => [
+                        'category' => ['Category is required (select one or add a new category).'],
+                    ],
+                ], 422);
+            }
+
             return back()->withErrors([
                 'category' => 'Category is required (select one or add a new category).',
             ])->withInput();
@@ -114,6 +124,15 @@ class AdminProductController extends Controller
         }
 
         if (count($rows) === 0) {
+            if ($request->expectsJson()) {
+                return response()->json([
+                    'message' => 'The given data was invalid.',
+                    'errors' => [
+                        'sizes' => ['Please add at least 1 size/price row.'],
+                    ],
+                ], 422);
+            }
+
             return back()->withErrors([
                 'sizes' => 'Please add at least 1 size/price row.',
             ])->withInput();
@@ -167,7 +186,46 @@ class AdminProductController extends Controller
         ]);
     }
 
-    public function update(Request $request, Product $product): RedirectResponse
+    public function editData(Product $product): JsonResponse
+    {
+        $groupItems = Product::query()
+            ->where('name', $product->name)
+            ->where('category', $product->category)
+            ->orderBy('size')
+            ->get(['id', 'name', 'category', 'size', 'price', 'image', 'is_active']);
+
+        $categories = Product::query()
+            ->select('category')
+            ->whereNotNull('category')
+            ->where('category', '!=', '')
+            ->distinct()
+            ->orderBy('category')
+            ->pluck('category')
+            ->values();
+
+        $first = $groupItems->first();
+
+        return response()->json([
+            'group' => [
+                'key' => ($first?->category ?? '') . '||' . ($first?->name ?? ''),
+                'product' => [
+                    'id' => $first?->id,
+                    'name' => $first?->name,
+                    'category' => $first?->category,
+                    'image' => $first?->image,
+                    'is_active' => (bool) ($first?->is_active),
+                ],
+                'sizes' => $groupItems->map(fn (Product $p) => [
+                    'id' => $p->id,
+                    'size' => $p->size,
+                    'price' => $p->price,
+                ])->values(),
+            ],
+            'categories' => $categories,
+        ]);
+    }
+
+    public function update(Request $request, Product $product): RedirectResponse|JsonResponse
     {
         $validated = $request->validate([
             'name' => ['required', 'string', 'max:255'],
@@ -255,6 +313,37 @@ class AdminProductController extends Controller
             if (is_file($oldFullPath)) {
                 @unlink($oldFullPath);
             }
+        }
+
+        if ($request->expectsJson()) {
+            $updatedItems = Product::query()
+                ->where('name', $validated['name'])
+                ->where('category', $category)
+                ->orderBy('size')
+                ->get(['id', 'name', 'category', 'size', 'price', 'image', 'is_active']);
+
+            $first = $updatedItems->first();
+
+            return response()->json([
+                'oldKey' => $oldCategory . '||' . $oldName,
+                'group' => [
+                    'key' => ($first?->category ?? '') . '||' . ($first?->name ?? ''),
+                    'product' => [
+                        'id' => $first?->id,
+                        'name' => $first?->name,
+                        'category' => $first?->category,
+                        'image' => $first?->image,
+                        'is_active' => (bool) ($first?->is_active),
+                    ],
+                    'sizes' => $updatedItems->map(fn (Product $p) => [
+                        'id' => $p->id,
+                        'size' => $p->size,
+                        'price' => $p->price,
+                    ])->values(),
+                    'editUrl' => $first ? route('admin.products.edit', $first) : null,
+                    'deleteUrl' => $first ? route('admin.products.destroy', $first) : null,
+                ],
+            ]);
         }
 
         return redirect()->route('admin.products.index')->with('status', 'Product updated.');

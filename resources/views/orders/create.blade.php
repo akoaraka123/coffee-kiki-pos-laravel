@@ -60,16 +60,18 @@
                         :id="productCardId(product.name)"
                         :data-name="product.name"
                         :data-category="product.category"
+                        x-on:click="openProductModal(product)"
                         :class="focusedProductName && focusedProductName === product.name ? 'ring-2 ring-white/20' : ''"
                     >
                         <h3 class="text-xl font-semibold tracking-wide text-white mb-2" x-text="product.name"></h3>
 
                         <div class="flex items-start justify-center pt-2">
                             <img
-                                :src="product.image ? ((window.__assetBaseUrl || '/') + product.image) : ((window.__assetBaseUrl || '/') + 'images/coffee-doodle.png')"
+                                :src="productImageSrc(product)"
                                 :alt="product.name"
                                 x-on:error="if (!$el.dataset.fallbackTried) { $el.dataset.fallbackTried = '1'; $el.src = (window.__assetBaseUrl || '/') + 'images/coffee-doodle.png'; }"
                                 class="max-h-60 w-auto object-contain drop-shadow-xl"
+                                x-on:click.stop="openProductModal(product)"
                                 loading="lazy"
                                 style="image-rendering: -webkit-optimize-contrast;"
                             />
@@ -80,7 +82,7 @@
                                 <button
                                     type="button"
                                     class="w-full flex items-center justify-between px-4 py-3 rounded-xl bg-black/40 border border-white/10 hover:bg-black/60 transition text-white text-lg font-medium"
-                                    x-on:click="add(product.name, size)"
+                                    x-on:click.stop="add(product.name, size)"
                                 >
                                     <span x-text="size.size"></span>
                                     <span>₱<span x-text="formatPrice(size.price)"></span></span>
@@ -93,10 +95,10 @@
         </div>
 
         <div class="sticky top-6 self-start h-[calc(100vh-160px)]">
-            <div class="rounded-xl border border-white/10 bg-white/5 p-5 shadow-sm">
+            <div class="rounded-xl border border-white/10 bg-white/5 p-5 shadow-sm flex flex-col h-full min-h-0">
             <div class="text-sm font-semibold">Current Order</div>
 
-            <div class="mt-4">
+            <div class="mt-4 flex-1 min-h-0 overflow-y-auto pr-1">
                 <template x-if="cart.length === 0">
                     <div class="grid place-items-center rounded-xl border border-white/10 bg-white/5 px-6 py-16 text-center">
                         <div class="text-4xl">📦</div>
@@ -126,7 +128,7 @@
                 </template>
             </div>
 
-            <div class="mt-6 border-t border-white/10 pt-5">
+            <div class="mt-4 border-t border-white/10 pt-5">
                 <div class="flex items-center justify-between">
                     <div class="text-sm font-semibold text-white/70">Total:</div>
                     <div class="text-xl font-bold">₱<span x-text="formatPrice(total())"></span></div>
@@ -258,6 +260,63 @@
         </div>
     </div>
 
+    <div class="fixed inset-0 z-50" x-show="productModalOpen" x-cloak x-on:keydown.escape.window="closeProductModal()">
+        <div class="absolute inset-0 bg-black/70" x-transition.opacity x-on:click="closeProductModal()"></div>
+        <div class="absolute inset-0 grid place-items-center px-4">
+            <div class="w-full max-w-md rounded-2xl border border-white/10 bg-[#111] p-6 shadow-2xl" x-transition x-on:click.stop>
+                <div class="flex items-start justify-between gap-4">
+                    <div class="min-w-0">
+                        <div class="text-lg font-semibold truncate" x-text="modalProduct?.name || ''"></div>
+                        <div class="mt-1 text-sm text-white/60">Select size</div>
+                    </div>
+                    <button
+                        type="button"
+                        class="grid h-9 w-9 place-items-center rounded-xl border border-white/10 bg-white/5 text-white/80 hover:bg-white/10"
+                        x-on:click="closeProductModal()"
+                        aria-label="Close"
+                        title="Close"
+                    >
+                        ✕
+                    </button>
+                </div>
+
+                <div class="mt-4 flex items-start justify-center">
+                    <img
+                        :src="modalProduct ? productImageSrc(modalProduct) : ((window.__assetBaseUrl || '/') + 'images/coffee-doodle.png')"
+                        :alt="modalProduct?.name || 'Product image'"
+                        x-on:error="if (!$el.dataset.fallbackTried) { $el.dataset.fallbackTried = '1'; $el.src = (window.__assetBaseUrl || '/') + 'images/coffee-doodle.png'; }"
+                        class="max-h-72 w-auto object-contain drop-shadow-xl"
+                        loading="lazy"
+                        style="image-rendering: -webkit-optimize-contrast;"
+                    />
+                </div>
+
+                <div class="mt-5 space-y-2">
+                    <template x-if="!modalProduct || !Array.isArray(modalProduct.sizes) || modalProduct.sizes.length === 0">
+                        <div class="rounded-xl border border-white/10 bg-white/5 px-4 py-4 text-sm text-white/60">
+                            No sizes available
+                        </div>
+                    </template>
+
+                    <template x-if="modalProduct && Array.isArray(modalProduct.sizes) && modalProduct.sizes.length > 0">
+                        <div class="space-y-2">
+                            <template x-for="size in modalProduct.sizes" :key="size.size">
+                                <button
+                                    type="button"
+                                    class="w-full flex items-center justify-between px-4 py-3 rounded-xl bg-black/40 border border-white/10 hover:bg-black/60 transition text-white text-lg font-medium"
+                                    x-on:click="add(modalProduct.name, size); closeProductModal()"
+                                >
+                                    <span x-text="size.size"></span>
+                                    <span>₱<span x-text="formatPrice(size.price)"></span></span>
+                                </button>
+                            </template>
+                        </div>
+                    </template>
+                </div>
+            </div>
+        </div>
+    </div>
+
     <script>
         function posOrder(products) {
             return {
@@ -274,6 +333,8 @@
                 cashReceived: '',
                 checkoutModal: false,
                 checkoutError: '',
+                productModalOpen: false,
+                modalProduct: null,
                 normalizeCategory(value) {
                     return String(value || '')
                         .trim()
@@ -375,6 +436,19 @@
                         .trim()
                         .replace(/[^a-z0-9]+/g, '-')
                         .replace(/(^-|-$)/g, '');
+                },
+                productImageSrc(product) {
+                    const image = product?.image;
+                    if (image) return (window.__assetBaseUrl || '/') + image;
+                    return (window.__assetBaseUrl || '/') + 'images/coffee-doodle.png';
+                },
+                openProductModal(product) {
+                    this.modalProduct = product || null;
+                    this.productModalOpen = true;
+                },
+                closeProductModal() {
+                    this.productModalOpen = false;
+                    this.modalProduct = null;
                 },
                 groupedProducts() {
                     const q = (this.searchQuery || '').trim().toLowerCase();
