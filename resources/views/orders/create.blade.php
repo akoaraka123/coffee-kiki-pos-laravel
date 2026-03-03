@@ -135,7 +135,7 @@
                 </div>
             </div>
 
-            <form method="POST" action="{{ route('orders.store') }}" class="mt-5 space-y-3">
+            <form method="POST" action="{{ route('orders.store') }}" class="mt-5 space-y-3" x-on:submit.prevent="startCheckout()">
                 @csrf
                 <input type="hidden" name="status" value="paid" />
                 <input type="hidden" name="items" x-bind:value="JSON.stringify(payloadItems())" />
@@ -215,6 +215,10 @@
             </form>
             </div>
         </div>
+    </div>
+
+    <div class="fixed bottom-6 left-1/2 z-50 -translate-x-1/2" x-show="toastOpen" x-cloak x-transition.opacity>
+        <div class="rounded-xl border border-white/10 bg-[#111] px-4 py-3 text-sm font-semibold text-white shadow-2xl" x-text="toastMessage"></div>
     </div>
 
     <div class="fixed inset-0 z-50" x-show="checkoutModal" x-cloak>
@@ -333,6 +337,8 @@
                 cashReceived: '',
                 checkoutModal: false,
                 checkoutError: '',
+                toastOpen: false,
+                toastMessage: '',
                 productModalOpen: false,
                 modalProduct: null,
                 normalizeCategory(value) {
@@ -514,6 +520,27 @@
                     this.cart = [];
                     this.persistCart();
                 },
+                resetAfterCheckout() {
+                    this.cart = [];
+                    this.persistCart();
+                    this.paymentType = 'cash';
+                    this.cashReceived = '';
+                    this.checkoutModal = false;
+                    this.checkoutError = '';
+
+                    this.$nextTick(() => {
+                        const input = this.$root.querySelector('input[name="customer_name"]');
+                        if (input) input.value = '';
+                    });
+                },
+                showToast(message) {
+                    this.toastMessage = message || '';
+                    this.toastOpen = true;
+                    window.clearTimeout(this.__toastTimer);
+                    this.__toastTimer = window.setTimeout(() => {
+                        this.toastOpen = false;
+                    }, 2500);
+                },
                 persistCart() {
                     try {
                         localStorage.setItem('pos_cart_v1', JSON.stringify(this.cart));
@@ -580,9 +607,53 @@
                     }
 
                     this.$nextTick(() => {
-                        const form = this.$root.querySelector('form[action="{{ route('orders.store') }}"]');
-                        if (form) form.submit();
+                        this.checkoutModal = false;
                     });
+
+                    const payload = {
+                        status: 'paid',
+                        items: JSON.stringify(this.payloadItems()),
+                        payment_type: this.paymentType,
+                        total_amount: this.formatPrice(this.total()),
+                        cash_received: this.paymentType === 'cash' ? this.cashReceived : '',
+                        customer_name: (() => {
+                            const input = this.$root.querySelector('input[name="customer_name"]');
+                            return input ? (input.value || '') : '';
+                        })(),
+                    };
+
+                    fetch(@js(route('orders.store')), {
+                        method: 'POST',
+                        headers: {
+                            'Accept': 'application/json',
+                            'Content-Type': 'application/json',
+                            'X-CSRF-TOKEN': @js(csrf_token()),
+                            'X-Requested-With': 'XMLHttpRequest',
+                        },
+                        credentials: 'same-origin',
+                        body: JSON.stringify(payload),
+                    })
+                        .then(async (res) => {
+                            if (res.status === 422) {
+                                const data = await res.json();
+                                const msg = data?.errors?.cash_received?.[0] || data?.errors?.items?.[0] || data?.message || 'Checkout failed.';
+                                this.checkoutError = msg;
+                                this.checkoutModal = true;
+                                return;
+                            }
+                            if (!res.ok) {
+                                this.checkoutError = 'Checkout failed. Please try again.';
+                                this.checkoutModal = true;
+                                return;
+                            }
+                            const data = await res.json();
+                            this.resetAfterCheckout();
+                            this.showToast(data?.message || 'Order completed successfully');
+                        })
+                        .catch(() => {
+                            this.checkoutError = 'Checkout failed. Please try again.';
+                            this.checkoutModal = true;
+                        });
                 },
             }
         }

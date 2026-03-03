@@ -34,6 +34,8 @@ Route::prefix('admin')
 
         Route::get('/orders', [AdminOrderController::class, 'index'])->name('orders.index');
         Route::get('/orders/details', [AdminOrderController::class, 'details'])->name('orders.details');
+        Route::get('/orders/details-json', [AdminOrderController::class, 'detailsJson'])->name('orders.details-json');
+        Route::get('/orders/{order}', [AdminOrderController::class, 'show'])->name('orders.show');
 
         Route::get('/products', [AdminProductController::class, 'index'])->name('products.index');
         Route::get('/products/create', [AdminProductController::class, 'create'])->name('products.create');
@@ -68,6 +70,10 @@ Route::middleware(['auth', 'verified', 'role:staff'])
         Route::get('/orders/create', [OrderController::class, 'create'])->name('orders.create');
         Route::get('/pos', [OrderController::class, 'pos'])->name('pos');
         Route::post('/orders', [OrderController::class, 'store'])->name('orders.store');
+
+        Route::get('/orders/{order}/details', [OrderController::class, 'details'])->name('orders.details');
+        Route::put('/orders/{order}/items/{item}', [OrderController::class, 'updateItem'])->name('orders.items.update');
+        Route::delete('/orders/{order}/items/{item}', [OrderController::class, 'deleteItem'])->name('orders.items.delete');
     });
 
 Route::middleware('auth')->group(function () {

@@ -32,4 +32,14 @@ class Order extends Model
     {
         return $this->hasMany(OrderItem::class);
     }
+
+    public function activeItems(): HasMany
+    {
+        return $this->hasMany(OrderItem::class)->whereNull('deleted_at');
+    }
+
+    public function activities(): HasMany
+    {
+        return $this->hasMany(OrderActivity::class);
+    }
 }

@@ -8,6 +8,7 @@ use App\Models\User;
 use Carbon\Carbon;
 use Illuminate\Pagination\LengthAwarePaginator;
 use Illuminate\Http\Request;
+use Illuminate\Http\JsonResponse;
 use Illuminate\View\View;
 
 class AdminOrderController extends Controller
@@ -139,8 +140,19 @@ class AdminOrderController extends Controller
             ->where('created_by', $staff->id)
             ->whereDate('created_at', $date)
             ->with([
-                'items:id,order_id,product_id,name,price,quantity,line_total',
+                'items' => function ($q) {
+                    $q->withTrashed()->select(['id', 'order_id', 'product_id', 'name', 'price', 'quantity', 'line_total', 'deleted_at']);
+                },
                 'items.product:id,size',
+            ])
+            ->withCount([
+                'activities as activity_count',
+                'activities as item_deleted_count' => function ($q) {
+                    $q->where('action', 'item_deleted');
+                },
+                'activities as item_edited_count' => function ($q) {
+                    $q->where('action', 'item_edited');
+                },
             ])
             ->orderBy('created_at')
             ->get(['id', 'order_number', 'total', 'total_amount', 'payment_type', 'cash_received', 'change_amount', 'status', 'created_at', 'created_by']);
@@ -158,6 +170,122 @@ class AdminOrderController extends Controller
             'totalOrders' => $totalOrders,
             'totalItems' => $totalItems,
             'totalSales' => $totalSales,
+        ]);
+    }
+
+    public function detailsJson(Request $request): JsonResponse
+    {
+        $staffId = $request->string('staff')->toString();
+        $date = $request->string('date')->toString();
+
+        $request->validate([
+            'staff' => ['required', 'integer', 'exists:users,id'],
+            'date' => ['required', 'date_format:Y-m-d'],
+        ]);
+
+        $staff = User::query()
+            ->where('role', 'staff')
+            ->findOrFail($staffId, ['id', 'name']);
+
+        $orders = Order::query()
+            ->where('created_by', $staff->id)
+            ->whereDate('created_at', $date)
+            ->with([
+                'items' => function ($q) {
+                    $q->withTrashed()->select(['id', 'order_id', 'product_id', 'name', 'price', 'quantity', 'line_total', 'deleted_at']);
+                },
+                'items.product:id,size',
+                'activities' => function ($q) {
+                    $q->with('actor:id,name')->orderBy('created_at');
+                },
+            ])
+            ->withCount([
+                'activities as item_deleted_count' => function ($q) {
+                    $q->where('action', 'item_deleted');
+                },
+                'activities as item_edited_count' => function ($q) {
+                    $q->where('action', 'item_edited');
+                },
+            ])
+            ->orderBy('created_at')
+            ->get(['id', 'order_number', 'total', 'total_amount', 'payment_type', 'cash_received', 'change_amount', 'status', 'created_at', 'created_by']);
+
+        $totalOrders = $orders->count();
+        $totalSales = (float) $orders->sum(fn (Order $o) => (float) ($o->total_amount ?? $o->total ?? 0));
+        $totalItems = (int) $orders
+            ->flatMap(fn (Order $o) => $o->items->whereNull('deleted_at'))
+            ->sum('quantity');
+
+        return response()->json([
+            'date' => $date,
+            'staff' => [
+                'id' => (int) $staff->id,
+                'name' => (string) $staff->name,
+            ],
+            'summary' => [
+                'total_orders' => (int) $totalOrders,
+                'total_items' => (int) $totalItems,
+                'total_sales' => (float) $totalSales,
+            ],
+            'orders' => $orders->map(function (Order $o) {
+                $total = (float) ($o->total_amount ?? $o->total ?? 0);
+                return [
+                    'id' => (int) $o->id,
+                    'order_number' => (string) $o->order_number,
+                    'created_at' => $o->created_at?->format('Y-m-d H:i') ?? null,
+                    'status' => (string) $o->status,
+                    'payment_type' => (string) ($o->payment_type ?? ''),
+                    'cash_received' => $o->cash_received !== null ? (float) $o->cash_received : null,
+                    'change_amount' => $o->change_amount !== null ? (float) $o->change_amount : null,
+                    'total' => $total,
+                    'item_edited_count' => (int) ($o->item_edited_count ?? 0),
+                    'item_deleted_count' => (int) ($o->item_deleted_count ?? 0),
+                    'items' => $o->items->map(function ($i) {
+                        return [
+                            'id' => (int) $i->id,
+                            'name' => (string) $i->name,
+                            'size' => $i->product?->size,
+                            'quantity' => (int) $i->quantity,
+                            'price' => (float) $i->price,
+                            'line_total' => (float) $i->line_total,
+                            'deleted_at' => $i->deleted_at?->format('Y-m-d H:i'),
+                        ];
+                    })->values()->all(),
+                    'activities' => $o->activities->map(function ($a) {
+                        return [
+                            'id' => (int) $a->id,
+                            'created_at' => $a->created_at?->format('Y-m-d H:i') ?? null,
+                            'actor_name' => $a->actor?->name,
+                            'action' => (string) $a->action,
+                            'note' => $a->note,
+                            'meta' => $a->meta,
+                        ];
+                    })->values()->all(),
+                ];
+            })->values()->all(),
+        ]);
+    }
+
+    public function show(Order $order): View
+    {
+        $order->load([
+            'creator:id,name',
+            'items' => function ($q) {
+                $q->withTrashed()->select(['id', 'order_id', 'product_id', 'name', 'price', 'quantity', 'line_total', 'deleted_at']);
+            },
+            'items.product:id,size',
+            'activities' => function ($q) {
+                $q->with('actor:id,name')->orderBy('created_at');
+            },
+        ]);
+
+        $hasEdits = $order->activities->contains(fn ($a) => $a->action === 'item_edited');
+        $hasDeletes = $order->activities->contains(fn ($a) => $a->action === 'item_deleted');
+
+        return view('admin.orders.show', [
+            'order' => $order,
+            'hasEdits' => $hasEdits,
+            'hasDeletes' => $hasDeletes,
         ]);
     }
 }

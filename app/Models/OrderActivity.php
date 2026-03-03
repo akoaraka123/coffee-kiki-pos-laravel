@@ -5,19 +5,21 @@ namespace App\Models;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
-use Illuminate\Database\Eloquent\SoftDeletes;
 
-class OrderItem extends Model
+class OrderActivity extends Model
 {
-    use HasFactory, SoftDeletes;
+    use HasFactory;
 
     protected $fillable = [
         'order_id',
-        'product_id',
-        'name',
-        'price',
-        'quantity',
-        'line_total',
+        'actor_id',
+        'action',
+        'meta',
+        'note',
+    ];
+
+    protected $casts = [
+        'meta' => 'array',
     ];
 
     public function order(): BelongsTo
@@ -25,8 +27,8 @@ class OrderItem extends Model
         return $this->belongsTo(Order::class);
     }
 
-    public function product(): BelongsTo
+    public function actor(): BelongsTo
     {
-        return $this->belongsTo(Product::class);
+        return $this->belongsTo(User::class, 'actor_id');
     }
 }
