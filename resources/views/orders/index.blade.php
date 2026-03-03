@@ -65,7 +65,7 @@
                     <tbody class="divide-y divide-white/10">
                         @forelse ($dailySummaries as $row)
                             <tr class="{{ (string) ($selectedDate ?? '') === (string) $row['date'] ? 'bg-white/5' : '' }}">
-                                <td class="px-5 py-4 font-medium">{{ $row['date'] }}</td>
+                                <td class="px-5 py-4 font-medium">{{ $row['date_display'] ?? $row['date'] }}</td>
                                 <td class="px-5 py-4 text-white/70">{{ number_format((int) $row['total_orders']) }}</td>
                                 <td class="px-5 py-4 text-white/70">{{ number_format((int) $row['total_items']) }}</td>
                                 <td class="px-5 py-4">₱{{ number_format((float) $row['total_sales'], 2) }}</td>
@@ -87,7 +87,7 @@
 
         @if (!empty($selectedDate))
             <div class="rounded-xl border border-white/10 bg-white/5 px-5 py-4 text-sm text-white/70">
-                Showing transactions for <span class="font-semibold text-white">{{ $selectedDate }}</span>
+                Showing transactions for <span class="font-semibold text-white">{{ $selectedDateDisplay ?? $selectedDate }}</span>
             </div>
         @endif
 
@@ -115,12 +115,12 @@
                                         <span x-text="orderStatuses[{{ (int) $order->id }}] ?? '{{ $order->status }}'"></span>
                                     </span>
                                 </td>
-                                <td class="px-5 py-4 text-white/70">{{ $order->created_at->format('Y-m-d H:i') }}</td>
+                                <td class="px-5 py-4 text-white/70">{{ $order->created_at->format('F j, Y (l) – g:i A') }}</td>
                                 <td class="px-5 py-4">
                                     <button
                                         type="button"
                                         class="inline-flex items-center justify-center rounded-xl border border-white/10 bg-white/5 px-4 py-2 text-xs font-semibold text-white/80 shadow-sm hover:bg-white/10"
-                                        x-on:click="openOrder({{ (int) $order->id }})"
+                                        @click.prevent="openOrder({{ (int) $order->id }})"
                                     >
                                         View
                                     </button>
@@ -140,32 +140,41 @@
             {{ $orders->links() }}
         </div>
 
-        <div class="fixed inset-0 z-50" x-show="modalOpen" x-cloak>
-        <div class="absolute inset-0 bg-black/70" x-transition.opacity x-on:click="closeModal()"></div>
-        <div class="absolute inset-0 grid place-items-center px-4">
-            <div class="w-full max-w-5xl overflow-hidden rounded-2xl border border-white/10 bg-[#111] shadow-2xl" x-transition x-on:keydown.escape.window="closeModal()">
-                <div class="sticky top-0 z-10 flex items-center justify-between border-b border-white/10 bg-[#111] px-6 py-4">
+        <div
+            class="fixed inset-0 z-50 flex items-center justify-center px-4"
+            x-show="modalOpen"
+            x-cloak
+            x-on:keydown.escape.window="closeModal()"
+        >
+            <div class="fixed inset-0 bg-black/60 backdrop-blur-sm" x-transition.opacity x-on:click="closeModal()"></div>
+
+            <div
+                class="relative w-full max-w-6xl overflow-hidden rounded-2xl border border-white/10 bg-zinc-900 shadow-2xl"
+                x-transition
+            >
+                <div class="sticky top-0 z-10 flex items-center justify-between gap-4 border-b border-white/10 bg-zinc-900/95 px-6 py-4 backdrop-blur">
                     <div class="min-w-0">
-                        <div class="text-lg font-semibold truncate">Order Details</div>
-                        <div class="mt-0.5 text-xs text-white/60" x-text="selectedOrder ? ('Order #' + selectedOrder.order_number) : ''"></div>
+                        <div class="truncate text-lg font-semibold">Order Details</div>
+                        <div class="mt-0.5 truncate text-xs text-white/60" x-text="selectedOrder ? ('Order #' + selectedOrder.order_number) : ''"></div>
                     </div>
                     <button type="button" class="inline-flex h-9 w-9 items-center justify-center rounded-xl border border-white/10 bg-white/5 text-white/80 hover:bg-white/10" x-on:click="closeModal()">
                         ✕
                     </button>
                 </div>
 
-                <div class="max-h-[75vh] overflow-y-auto overflow-x-hidden px-6 py-5">
+                <div class="max-h-[85vh] overflow-y-auto overflow-x-hidden px-6 py-5">
                     <template x-if="loading">
-                        <div class="rounded-xl border border-white/10 bg-white/5 px-4 py-3 text-sm text-white/70">
-                            Loading order details...
+                        <div class="flex items-center gap-3 rounded-xl border border-white/10 bg-white/5 px-4 py-3 text-sm text-white/70">
+                            <span class="inline-block h-4 w-4 animate-spin rounded-full border-2 border-white/20 border-t-white/70"></span>
+                            <span>Loading order details...</span>
                         </div>
                     </template>
 
-                    <template x-if="errorMessage">
+                    <template x-if="!loading && errorMessage">
                         <div class="rounded-xl border border-rose-500/30 bg-rose-500/10 px-4 py-3 text-sm text-rose-200" x-text="errorMessage"></div>
                     </template>
 
-                    <template x-if="selectedOrder && !loading">
+                    <template x-if="!loading && selectedOrder && !errorMessage">
                         <div class="space-y-5">
                             <div class="grid grid-cols-1 gap-4 sm:grid-cols-2">
                                 <div class="rounded-xl border border-white/10 bg-white/5 p-4">
@@ -280,7 +289,5 @@
                 </div>
             </div>
         </div>
-        </div>
-    </div>
 
 @endsection

@@ -32,7 +32,7 @@
             <div class="grid grid-cols-1 gap-4 sm:grid-cols-2">
                 <div>
                     <div class="text-xs font-semibold text-white/60">Date & Time</div>
-                    <div class="mt-1 text-sm font-semibold">{{ $order->created_at->format('Y-m-d H:i') }}</div>
+                    <div class="mt-1 text-sm font-semibold">{{ $order->created_at->format('F j, Y (l) – g:i A') }}</div>
                 </div>
                 <div>
                     <div class="text-xs font-semibold text-white/60">Staff</div>
@@ -126,7 +126,7 @@
                     <div class="rounded-xl border border-white/10 bg-black/30 p-4">
                         <div class="flex flex-col gap-1 sm:flex-row sm:items-center sm:justify-between">
                             <div class="text-sm font-semibold">
-                                {{ $activity->created_at->format('Y-m-d H:i') }} — {{ $activity->actor?->name ?? 'System' }}
+                                {{ $activity->created_at->format('F j, Y (l) – g:i A') }} — {{ $activity->actor?->name ?? 'System' }}
                             </div>
                             <div class="text-xs font-semibold text-white/60">{{ $activity->action }}</div>
                         </div>

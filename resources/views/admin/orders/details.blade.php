@@ -18,7 +18,7 @@
             <div class="grid grid-cols-1 gap-4 sm:grid-cols-2">
                 <div>
                     <div class="text-xs font-semibold text-white/60">Date</div>
-                    <div class="mt-1 text-sm font-semibold">{{ $date }}</div>
+                    <div class="mt-1 text-sm font-semibold">{{ $dateDisplay ?? $date }}</div>
                 </div>
                 <div>
                     <div class="text-xs font-semibold text-white/60">Staff</div>
@@ -63,7 +63,7 @@
                                 @endif
                             </div>
                             <div class="mt-1 text-xs text-white/60">
-                                Time: {{ $order->created_at->format('h:i A') }}
+                                Created: {{ $order->created_at->format('F j, Y (l) – g:i A') }}
                                 <span class="text-white/30">•</span>
                                 Status: <span class="text-white/80">{{ $order->status }}</span>
                                 <span class="text-white/30">•</span>

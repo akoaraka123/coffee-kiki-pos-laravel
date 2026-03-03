@@ -54,6 +54,46 @@ class AdminProductController extends Controller
         ]);
     }
 
+    public function indexJson(): JsonResponse
+    {
+        $products = Product::query()
+            ->orderBy('category')
+            ->orderBy('name')
+            ->orderBy('size')
+            ->get(['id', 'name', 'category', 'size', 'price', 'image', 'is_active']);
+
+        $groups = $products
+            ->groupBy(fn (Product $p) => $p->category . '||' . $p->name)
+            ->map(function ($items) {
+                /** @var \Illuminate\Support\Collection<int, Product> $items */
+                $first = $items->first();
+                $key = ($first?->category ?? '') . '||' . ($first?->name ?? '');
+
+                return [
+                    'key' => $key,
+                    'product' => [
+                        'id' => $first?->id,
+                        'name' => $first?->name,
+                        'category' => $first?->category,
+                        'image' => $first?->image,
+                        'is_active' => (bool) ($first?->is_active),
+                    ],
+                    'sizes' => $items->map(fn (Product $p) => [
+                        'id' => $p->id,
+                        'size' => $p->size,
+                        'price' => $p->price,
+                    ])->values(),
+                    'editUrl' => $first ? route('admin.products.edit', $first) : null,
+                    'deleteUrl' => $first ? route('admin.products.destroy', $first) : null,
+                ];
+            })
+            ->values();
+
+        return response()->json([
+            'groups' => $groups,
+        ]);
+    }
+
     public function create(): View
     {
         $categories = Product::query()
@@ -158,6 +198,37 @@ class AdminProductController extends Controller
                 ]);
             }
         });
+
+        if ($request->expectsJson()) {
+            $createdItems = Product::query()
+                ->where('name', $validated['name'])
+                ->where('category', $category)
+                ->orderBy('size')
+                ->get(['id', 'name', 'category', 'size', 'price', 'image', 'is_active']);
+
+            $first = $createdItems->first();
+
+            return response()->json([
+                'message' => 'Product created.',
+                'group' => [
+                    'key' => ($first?->category ?? '') . '||' . ($first?->name ?? ''),
+                    'product' => [
+                        'id' => $first?->id,
+                        'name' => $first?->name,
+                        'category' => $first?->category,
+                        'image' => $first?->image,
+                        'is_active' => (bool) ($first?->is_active),
+                    ],
+                    'sizes' => $createdItems->map(fn (Product $p) => [
+                        'id' => $p->id,
+                        'size' => $p->size,
+                        'price' => $p->price,
+                    ])->values(),
+                    'editUrl' => $first ? route('admin.products.edit', $first) : null,
+                    'deleteUrl' => $first ? route('admin.products.destroy', $first) : null,
+                ],
+            ]);
+        }
 
         return redirect()->route('admin.products.index')->with('status', 'Product created.');
     }

@@ -3,7 +3,7 @@
 @section('title', 'Products')
 
 @section('content')
-    <div class="space-y-6" x-data="adminProductsIndex(@js($groups))">
+    <div class="space-y-6" x-data="adminProductsIndex">
         <div class="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
             <div>
                 <h2 class="text-xl font-semibold">Products</h2>
@@ -11,12 +11,12 @@
             </div>
 
             <div class="flex items-center gap-3">
-                <a href="{{ route('admin.categories.index') }}" class="inline-flex items-center justify-center rounded-xl border border-white/10 bg-white/5 px-4 py-2 text-sm font-semibold text-white/80 shadow-sm hover:bg-white/10">
+                <button type="button" x-on:click.prevent.stop="openCategoriesModal()" class="inline-flex items-center justify-center rounded-xl border border-white/10 bg-white/5 px-4 py-2 text-sm font-semibold text-white/80 shadow-sm hover:bg-white/10">
                     Manage Categories
-                </a>
-                <a href="{{ route('admin.products.create') }}" class="inline-flex items-center justify-center rounded-xl bg-[#efe9df] px-4 py-2 text-sm font-semibold text-[#1c1c1c] shadow-sm hover:opacity-95">
+                </button>
+                <button type="button" x-on:click.prevent.stop="openAddModal()" class="inline-flex items-center justify-center rounded-xl bg-[#efe9df] px-4 py-2 text-sm font-semibold text-[#1c1c1c] shadow-sm hover:opacity-95">
                     Add Product
-                </a>
+                </button>
             </div>
         </div>
 
@@ -102,7 +102,7 @@
             No products found.
         </div>
 
-        <div class="fixed inset-0 z-50" x-show="editModalOpen" x-cloak x-on:keydown.escape.window="closeEdit()">
+        <div class="fixed inset-0 z-50" x-show="editModalOpen" x-on:keydown.escape.window="closeEdit()">
             <div class="absolute inset-0 bg-black/70" x-transition.opacity x-on:click="closeEdit()"></div>
             <div class="absolute inset-0 grid place-items-center px-4">
                 <div class="w-[min(92vw,44rem)] rounded-2xl border border-white/10 bg-[#111] shadow-2xl max-h-[85vh] overflow-hidden" x-transition x-on:click.stop>
@@ -225,265 +225,215 @@
                 </div>
             </div>
         </div>
+
+        <div class="fixed inset-0 z-50" x-show="addModalOpen" x-on:keydown.escape.window="closeAddModal()">
+            <div class="absolute inset-0 bg-black/70" x-transition.opacity x-on:click="closeAddModal()"></div>
+            <div class="absolute inset-0 grid place-items-center px-4">
+                <div class="w-full max-w-6xl rounded-2xl border border-white/10 bg-[#111] shadow-2xl max-h-[85vh] overflow-hidden" x-transition x-on:click.stop>
+                    <div class="flex items-start justify-between gap-4 border-b border-white/10 px-6 py-4">
+                        <div class="min-w-0">
+                            <div class="text-lg font-semibold truncate">Add Product</div>
+                            <div class="mt-1 text-sm text-white/60">Create a new product and its size/price options.</div>
+                        </div>
+                        <button
+                            type="button"
+                            class="grid h-9 w-9 place-items-center rounded-xl border border-white/10 bg-white/5 text-white/80 hover:bg-white/10"
+                            x-on:click="closeAddModal()"
+                            aria-label="Close"
+                            title="Close"
+                        >
+                            ✕
+                        </button>
+                    </div>
+
+                    <div class="px-6 py-5 overflow-y-auto overflow-x-hidden">
+                        <div class="grid grid-cols-1 gap-5 md:grid-cols-2">
+                            <div class="md:col-span-2">
+                                <label class="text-xs text-white/60">Product Name</label>
+                                <input type="text" class="mt-2 h-11 w-full rounded-2xl border border-white/10 bg-[#1b1b1b] px-4 text-white placeholder:text-white/30 focus:outline-none focus:ring-2 focus:ring-white/20" x-model="addForm.name" placeholder="e.g. Iced Latte" />
+                                <div class="mt-2 text-xs text-rose-200" x-text="fieldErrorFrom(addErrors, 'name')"></div>
+                            </div>
+
+                            <div>
+                                <label class="text-xs text-white/60">Category</label>
+                                <select class="mt-2 h-11 w-full rounded-2xl border border-white/10 bg-[#1b1b1b] px-4 text-white focus:outline-none focus:ring-2 focus:ring-white/20" x-model="addForm.category" x-bind:disabled="(addForm.new_category || '').trim().length > 0" x-on:change="if ((addForm.category || '').trim().length > 0) { addForm.new_category = '' }">
+                                    <option value="">Select category</option>
+                                    <template x-for="cat in categoryOptions" :key="cat">
+                                        <option :value="cat" x-text="cat"></option>
+                                    </template>
+                                </select>
+                                <div class="mt-2 text-xs text-white/40" x-show="(addForm.new_category || '').trim().length === 0">Or add a new category on the right.</div>
+                                <div class="mt-2 text-xs text-rose-200" x-text="fieldErrorFrom(addErrors, 'category')"></div>
+                            </div>
+
+                            <div>
+                                <label class="text-xs text-white/60">Add Category (optional)</label>
+                                <input type="text" placeholder="Type new category name" class="mt-2 h-11 w-full rounded-2xl border border-white/10 bg-[#1b1b1b] px-4 text-white placeholder:text-white/30 focus:outline-none focus:ring-2 focus:ring-white/20" x-model="addForm.new_category" x-on:input="if ((addForm.new_category || '').trim().length > 0) { addForm.category = '' }" />
+                            </div>
+
+                            <div>
+                                <label class="text-xs text-white/60">Product Image</label>
+                                <input type="file" accept="image/*" class="mt-2 w-full rounded-2xl border border-white/10 bg-[#1b1b1b] px-4 py-3 text-white file:mr-4 file:rounded-xl file:border-0 file:bg-white/10 file:px-4 file:py-2 file:text-xs file:font-semibold file:text-white hover:file:bg-white/15" x-ref="addImageInput" x-on:change="onAddImageChange($event)" />
+                                <div class="mt-2 text-xs text-white/40">Optional. If not set, POS will use a placeholder.</div>
+                                <div class="mt-2 text-xs text-rose-200" x-text="fieldErrorFrom(addErrors, 'image')"></div>
+                            </div>
+
+                            <div>
+                                <label class="text-xs text-white/60">Preview</label>
+                                <div class="mt-2 flex items-center gap-4">
+                                    <div class="h-16 w-16 overflow-hidden rounded-2xl border border-white/10 bg-white/5">
+                                        <img :src="addImagePreviewSrc()" :alt="addForm.name || 'Product image'" class="h-full w-full object-contain" loading="lazy" />
+                                    </div>
+                                    <div class="min-w-0 text-xs text-white/50 truncate" x-text="addImageFile ? addImageFile.name : '—'"></div>
+                                </div>
+                            </div>
+
+                            <div class="md:col-span-2">
+                                <div class="flex items-center justify-between gap-3">
+                                    <label class="text-xs text-white/60">Sizes & Prices</label>
+                                    <button type="button" class="inline-flex items-center justify-center rounded-xl border border-white/10 bg-white/5 px-3 py-2 text-xs font-semibold text-white/80 hover:bg-white/10" x-on:click="addAddSizeRow()">
+                                        Add Size
+                                    </button>
+                                </div>
+
+                                <div class="mt-2 space-y-3">
+                                    <template x-for="(row, idx) in addForm.sizes" :key="idx">
+                                        <div class="grid grid-cols-1 gap-3 sm:grid-cols-[minmax(0,1fr)_minmax(0,160px)_auto] sm:items-center">
+                                            <div class="min-w-0">
+                                                <input type="text" placeholder="OZ label (e.g. 12oz)" class="h-11 w-full rounded-2xl border border-white/10 bg-[#1b1b1b] px-4 text-white placeholder:text-white/30 focus:outline-none focus:ring-2 focus:ring-white/20" x-model="row.size" />
+                                            </div>
+                                            <div class="min-w-0">
+                                                <input type="text" placeholder="Price (e.g. 85.00)" inputmode="decimal" class="h-11 w-full rounded-2xl border border-white/10 bg-[#1b1b1b] px-4 text-white placeholder:text-white/30 focus:outline-none focus:ring-2 focus:ring-white/20" x-model="row.price" />
+                                            </div>
+                                            <div class="flex justify-end sm:justify-start">
+                                                <button type="button" class="inline-flex h-11 items-center justify-center rounded-2xl border border-rose-500/30 bg-rose-500/10 px-4 text-sm font-semibold text-rose-200 hover:bg-rose-500/20" x-on:click="removeAddSizeRow(idx)" x-bind:disabled="addForm.sizes.length === 1" x-bind:class="addForm.sizes.length === 1 ? 'opacity-50 cursor-not-allowed' : ''">
+                                                    Delete
+                                                </button>
+                                            </div>
+                                        </div>
+                                    </template>
+                                </div>
+                                <div class="mt-2 text-xs text-rose-200" x-text="fieldErrorFrom(addErrors, 'sizes')"></div>
+                            </div>
+
+                            <div class="md:col-span-2">
+                                <label class="inline-flex items-center gap-2 text-sm text-white/70">
+                                    <input type="checkbox" class="rounded border-white/10 bg-[#1b1b1b] text-white focus:ring-white/20" x-model="addForm.is_active" />
+                                    Active (visible in POS)
+                                </label>
+                            </div>
+                        </div>
+
+                        <div class="mt-5 rounded-xl border border-rose-500/30 bg-rose-500/10 px-4 py-3 text-sm text-rose-200" x-show="addError">
+                            <div class="font-semibold">Action failed</div>
+                            <div class="mt-1" x-text="addError"></div>
+                        </div>
+                    </div>
+
+                    <div class="flex items-center justify-end gap-3 border-t border-white/10 px-6 py-4">
+                        <button type="button" class="inline-flex items-center justify-center rounded-xl border border-white/10 bg-white/5 px-4 py-2 text-sm font-semibold text-white/80 hover:bg-white/10" x-on:click="closeAddModal()">
+                            Cancel
+                        </button>
+                        <button type="button" class="rounded-xl bg-[#efe9df] px-4 py-2 text-sm font-semibold text-[#1c1c1c] shadow-sm hover:opacity-95 active:opacity-90" x-on:click="submitAddProduct()" x-bind:disabled="addSaving" x-bind:class="addSaving ? 'opacity-50 cursor-not-allowed' : ''">
+                            <span x-show="!addSaving">Create Product</span>
+                            <span x-show="addSaving">Creating...</span>
+                        </button>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <div class="fixed inset-0 z-50" x-show="categoriesModalOpen" x-on:keydown.escape.window="closeCategoriesModal()">
+            <div class="absolute inset-0 bg-black/70" x-transition.opacity x-on:click="closeCategoriesModal()"></div>
+            <div class="absolute inset-0 grid place-items-center px-4">
+                <div class="w-full max-w-6xl rounded-2xl border border-white/10 bg-[#111] shadow-2xl max-h-[85vh] overflow-hidden" x-transition x-on:click.stop>
+                    <div class="flex items-start justify-between gap-4 border-b border-white/10 px-6 py-4">
+                        <div class="min-w-0">
+                            <div class="text-lg font-semibold truncate">Manage Categories</div>
+                            <div class="mt-1 text-sm text-white/60">Rename or delete categories used by products.</div>
+                        </div>
+                        <button type="button" class="grid h-9 w-9 place-items-center rounded-xl border border-white/10 bg-white/5 text-white/80 hover:bg-white/10" x-on:click="closeCategoriesModal()" aria-label="Close" title="Close">✕</button>
+                    </div>
+
+                    <div class="px-6 py-5 overflow-y-auto overflow-x-hidden">
+                        <template x-if="categoriesLoading">
+                            <div class="rounded-xl border border-white/10 bg-white/5 px-4 py-3 text-sm text-white/70">Loading categories...</div>
+                        </template>
+
+                        <template x-if="!categoriesLoading">
+                            <div class="overflow-hidden rounded-xl border border-white/10 bg-white/5 shadow-sm">
+                                <div class="overflow-x-auto">
+                                    <table class="min-w-full text-left text-sm">
+                                        <thead class="bg-white/5 text-white/70">
+                                            <tr>
+                                                <th class="px-5 py-4 font-medium">Category</th>
+                                                <th class="px-5 py-4 font-medium">Products</th>
+                                                <th class="px-5 py-4 font-medium"></th>
+                                            </tr>
+                                        </thead>
+                                        <tbody class="divide-y divide-white/10">
+                                            <template x-for="cat in categoriesRows" :key="cat.key">
+                                                <tr>
+                                                    <td class="px-5 py-4">
+                                                        <div class="flex flex-col gap-2 sm:flex-row sm:items-center">
+                                                            <input type="text" class="h-11 w-full rounded-2xl border border-white/10 bg-[#1b1b1b] px-4 text-white placeholder:text-white/30 focus:outline-none focus:ring-2 focus:ring-white/20" x-model="cat.newName" />
+                                                            <button type="button" class="shrink-0 rounded-xl bg-[#efe9df] px-4 py-2 text-xs font-semibold text-[#1c1c1c] shadow-sm hover:opacity-95" x-on:click="saveCategory(cat)" x-bind:disabled="cat.saving" x-bind:class="cat.saving ? 'opacity-50 cursor-not-allowed' : ''">
+                                                                <span x-show="!cat.saving">Save</span>
+                                                                <span x-show="cat.saving">Saving...</span>
+                                                            </button>
+                                                        </div>
+                                                        <div class="mt-2 text-xs text-rose-200" x-text="cat.error"></div>
+                                                    </td>
+                                                    <td class="px-5 py-4 text-white/70" x-text="cat.count"></td>
+                                                    <td class="px-5 py-4 text-right">
+                                                        <template x-if="!cat.confirmingDelete">
+                                                            <button type="button" class="text-xs text-rose-300 hover:text-rose-200 underline decoration-rose-300/30" x-on:click="cat.confirmingDelete = true">Delete</button>
+                                                        </template>
+                                                        <template x-if="cat.confirmingDelete">
+                                                            <div class="flex items-center justify-end gap-3">
+                                                                <button type="button" class="text-xs text-white/60 hover:text-white underline decoration-white/20" x-on:click="cat.confirmingDelete = false">Cancel</button>
+                                                                <button type="button" class="text-xs text-rose-300 hover:text-rose-200 underline decoration-rose-300/30" x-on:click="deleteCategory(cat)" x-bind:disabled="cat.deleting" x-bind:class="cat.deleting ? 'opacity-50 cursor-not-allowed' : ''">
+                                                                    <span x-show="!cat.deleting">Confirm Delete</span>
+                                                                    <span x-show="cat.deleting">Deleting...</span>
+                                                                </button>
+                                                            </div>
+                                                        </template>
+                                                    </td>
+                                                </tr>
+                                            </template>
+
+                                            <tr x-show="categoriesRows.length === 0">
+                                                <td class="px-5 py-6 text-white/60" colspan="3">No categories found.</td>
+                                            </tr>
+                                        </tbody>
+                                    </table>
+                                </div>
+                            </div>
+                        </template>
+
+                        <div class="mt-4 text-xs text-white/40">
+                            Deleting a category will move its products to <span class="text-white/60">uncategorized</span> so they stay visible in POS.
+                        </div>
+
+                        <div class="mt-4 rounded-xl border border-rose-500/30 bg-rose-500/10 px-4 py-3 text-sm text-rose-200" x-show="categoriesError">
+                            <div class="font-semibold">Action failed</div>
+                            <div class="mt-1" x-text="categoriesError"></div>
+                        </div>
+                    </div>
+
+                    <div class="flex items-center justify-end gap-3 border-t border-white/10 px-6 py-4">
+                        <button type="button" class="inline-flex items-center justify-center rounded-xl border border-white/10 bg-white/5 px-4 py-2 text-sm font-semibold text-white/80 hover:bg-white/10" x-on:click="closeCategoriesModal()">Close</button>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <div class="fixed bottom-5 right-5 z-[60]" x-show="toastMessage" x-transition.opacity>
+            <div class="rounded-xl border border-white/10 bg-[#111] px-4 py-3 text-sm text-white/80 shadow-2xl" x-text="toastMessage"></div>
+        </div>
     </div>
 
     <script>
         window.__assetBaseUrl = @js(rtrim(asset(''), '/') . '/');
-
-        function adminProductsIndex(groups) {
-            return {
-                searchQuery: '',
-                groups,
-                activeTab: 'all',
-                editModalOpen: false,
-                editSaving: false,
-                editError: '',
-                editErrors: {},
-                editCategories: [],
-                editForm: {
-                    id: null,
-                    key: '',
-                    name: '',
-                    category: '',
-                    new_category: '',
-                    image: '',
-                    is_active: false,
-                    sizes: [{ size: '', price: '' }],
-                },
-                editImageFile: null,
-                editImagePreviewUrl: '',
-                normalizeCategory(value) {
-                    return String(value || '')
-                        .trim()
-                        .toLowerCase()
-                        .replace(/\s+/g, '_')
-                        .replace(/-+/g, '_');
-                },
-                displayCategory(value) {
-                    const v = String(value || '').trim();
-                    if (!v) return 'Uncategorized';
-                    return v
-                        .replace(/[_-]+/g, ' ')
-                        .replace(/\s+/g, ' ')
-                        .trim()
-                        .replace(/\b\w/g, c => c.toUpperCase());
-                },
-                get categories() {
-                    const map = new Map();
-                    (this.groups || []).forEach(item => {
-                        const raw = item?.product?.category;
-                        const key = this.normalizeCategory(raw);
-                        if (!key) return;
-                        if (!map.has(key)) {
-                            map.set(key, { key, label: this.displayCategory(raw) });
-                        }
-                    });
-                    return Array.from(map.values());
-                },
-                formatPrice(value) {
-                    const n = Number(value || 0);
-                    return n.toFixed(2);
-                },
-                filteredGroups() {
-                    const q = String(this.searchQuery || '').trim().toLowerCase();
-                    const base = (this.groups || []).filter(item => {
-                        if (this.activeTab === 'all') return true;
-                        const catKey = this.normalizeCategory(item?.product?.category);
-                        return catKey === this.activeTab;
-                    });
-
-                    if (!q || q.length < 2) return base;
-
-                    return base.filter(item => {
-                        const name = String(item.product?.name || '').toLowerCase();
-                        const category = String(item.product?.category || '').toLowerCase();
-                        return name.includes(q) || category.includes(q);
-                    });
-                },
-                confirmDelete(e) {
-                    const ok = confirm('Are you sure you want to delete this product?');
-                    if (!ok) return;
-                    e.target.submit();
-                },
-                fieldError(field) {
-                    const v = this.editErrors?.[field];
-                    if (!v) return '';
-                    if (Array.isArray(v)) return v.join(' ');
-                    return String(v);
-                },
-                editImagePreviewSrc() {
-                    if (this.editImagePreviewUrl) return this.editImagePreviewUrl;
-                    if (this.editForm.image) return (window.__assetBaseUrl || '/') + this.editForm.image;
-                    return (window.__assetBaseUrl || '/') + 'images/coffee-doodle.png';
-                },
-                onImageChange(e) {
-                    const file = e?.target?.files?.[0];
-                    this.editImageFile = file || null;
-                    if (this.editImagePreviewUrl) {
-                        try { URL.revokeObjectURL(this.editImagePreviewUrl); } catch (err) {}
-                    }
-                    this.editImagePreviewUrl = file ? URL.createObjectURL(file) : '';
-                },
-                closeEdit() {
-                    this.editModalOpen = false;
-                    this.editSaving = false;
-                    this.editError = '';
-                    this.editErrors = {};
-                    this.editCategories = [];
-                    this.editForm = {
-                        id: null,
-                        key: '',
-                        name: '',
-                        category: '',
-                        new_category: '',
-                        image: '',
-                        is_active: false,
-                        sizes: [{ size: '', price: '' }],
-                    };
-                    this.editImageFile = null;
-                    if (this.editImagePreviewUrl) {
-                        try { URL.revokeObjectURL(this.editImagePreviewUrl); } catch (err) {}
-                    }
-                    this.editImagePreviewUrl = '';
-                    if (this.$refs?.imageInput) {
-                        this.$refs.imageInput.value = '';
-                    }
-                },
-                addSizeRow() {
-                    this.editForm.sizes.push({ size: '', price: '' });
-                },
-                removeSizeRow(idx) {
-                    if (this.editForm.sizes.length <= 1) return;
-                    const ok = confirm('Are you sure you want to delete this size?');
-                    if (!ok) return;
-                    this.editForm.sizes.splice(idx, 1);
-                },
-                async openEdit(item) {
-                    this.editError = '';
-                    this.editErrors = {};
-                    if (!item?.product?.id) {
-                        this.editError = 'Unable to open editor.';
-                        return;
-                    }
-                    this.editModalOpen = true;
-
-                    try {
-                        const url = `/admin/products/${encodeURIComponent(item.product.id)}/edit-data`;
-                        const res = await fetch(url, {
-                            headers: {
-                                'Accept': 'application/json',
-                                'X-Requested-With': 'XMLHttpRequest',
-                            },
-                            credentials: 'same-origin',
-                        });
-
-                        if (!res.ok) {
-                            this.editError = 'Failed to load product data.';
-                            return;
-                        }
-
-                        const data = await res.json();
-                        const group = data?.group;
-                        const product = group?.product;
-
-                        this.editCategories = Array.isArray(data?.categories) ? data.categories : [];
-                        this.editForm.id = product?.id ?? item.product.id;
-                        this.editForm.key = group?.key || item.key;
-                        this.editForm.name = product?.name || item.product.name || '';
-                        this.editForm.category = product?.category || item.product.category || '';
-                        this.editForm.new_category = '';
-                        this.editForm.image = product?.image || item.product.image || '';
-                        this.editForm.is_active = !!product?.is_active;
-                        this.editForm.sizes = Array.isArray(group?.sizes) && group.sizes.length > 0
-                            ? group.sizes.map(s => ({ size: s.size || 'Regular', price: String(s.price ?? '') }))
-                            : [{ size: '', price: '' }];
-                    } catch (err) {
-                        this.editError = 'Failed to load product data.';
-                    }
-                },
-                upsertGroup(oldKey, newGroup) {
-                    if (!newGroup) return;
-
-                    const newKey = newGroup.key;
-                    const next = (this.groups || []).filter(g => g.key !== oldKey);
-                    const existingIndex = next.findIndex(g => g.key === newKey);
-
-                    if (existingIndex >= 0) {
-                        next[existingIndex] = newGroup;
-                    } else {
-                        next.unshift(newGroup);
-                    }
-
-                    this.groups = next;
-                },
-                async saveEdit() {
-                    if (this.editSaving) return;
-                    this.editSaving = true;
-                    this.editError = '';
-                    this.editErrors = {};
-
-                    try {
-                        const id = this.editForm.id;
-                        const url = `/admin/products/${encodeURIComponent(id)}`;
-
-                        const fd = new FormData();
-                        fd.append('_method', 'PUT');
-                        fd.append('_token', @js(csrf_token()));
-                        fd.append('name', this.editForm.name || '');
-                        fd.append('category', this.editForm.category || '');
-                        fd.append('new_category', this.editForm.new_category || '');
-                        if (this.editForm.is_active) {
-                            fd.append('is_active', '1');
-                        }
-
-                        (this.editForm.sizes || []).forEach(row => {
-                            fd.append('sizes[]', row?.size ?? '');
-                            fd.append('prices[]', row?.price ?? '');
-                        });
-
-                        if (this.editImageFile) {
-                            fd.append('image', this.editImageFile);
-                        }
-
-                        const res = await fetch(url, {
-                            method: 'POST',
-                            body: fd,
-                            headers: {
-                                'Accept': 'application/json',
-                                'X-Requested-With': 'XMLHttpRequest',
-                            },
-                            credentials: 'same-origin',
-                        });
-
-                        if (res.status === 422) {
-                            const data = await res.json();
-                            this.editErrors = data?.errors || {};
-                            this.editSaving = false;
-                            return;
-                        }
-
-                        if (!res.ok) {
-                            this.editError = 'Failed to save changes.';
-                            this.editSaving = false;
-                            return;
-                        }
-
-                        const data = await res.json();
-                        const group = data?.group;
-                        const oldKey = data?.oldKey || this.editForm.key;
-
-                        if (group) {
-                            this.upsertGroup(oldKey, group);
-                        }
-
-                        this.editSaving = false;
-                        this.closeEdit();
-                    } catch (err) {
-                        this.editError = 'Failed to save changes.';
-                        this.editSaving = false;
-                    }
-                },
-            }
-        }
     </script>
 @endsection

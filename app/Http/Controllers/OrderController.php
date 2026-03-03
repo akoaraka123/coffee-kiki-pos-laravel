@@ -18,6 +18,18 @@ use Symfony\Component\HttpFoundation\Response;
 
 class OrderController extends Controller
 {
+    private const DISPLAY_TIMEZONE = 'Asia/Manila';
+
+    private function formatHumanDate(?Carbon $dt): ?string
+    {
+        return $dt ? $dt->copy()->setTimezone(self::DISPLAY_TIMEZONE)->format('F j, Y (l)') : null;
+    }
+
+    private function formatHumanDateTime(?Carbon $dt): ?string
+    {
+        return $dt ? $dt->copy()->setTimezone(self::DISPLAY_TIMEZONE)->format('F j, Y (l) – g:i A') : null;
+    }
+
     public function index(Request $request): View
     {
         $user = $request->user();
@@ -87,13 +99,29 @@ class OrderController extends Controller
 
             $dailySummaries = $groups->map(function ($g) use ($itemsByDate) {
                 $date = (string) $g->order_date;
+                $dateDisplay = null;
+                try {
+                    $dateDisplay = Carbon::parse($date)->format('F j, Y (l)');
+                } catch (\Throwable $e) {
+                    $dateDisplay = $date;
+                }
                 return [
                     'date' => $date,
+                    'date_display' => $dateDisplay,
                     'total_orders' => (int) ($g->total_orders ?? 0),
                     'total_items' => (int) ($itemsByDate->get($date, 0)),
                     'total_sales' => (float) ($g->total_sales ?? 0),
                 ];
             });
+        }
+
+        $selectedDateDisplay = null;
+        if ($selectedDate) {
+            try {
+                $selectedDateDisplay = Carbon::parse($selectedDate)->format('F j, Y (l)');
+            } catch (\Throwable $e) {
+                $selectedDateDisplay = $selectedDate;
+            }
         }
 
         return view('orders.index', [
@@ -102,6 +130,7 @@ class OrderController extends Controller
             'todayOrders' => $todayOrders,
             'dailySummaries' => $dailySummaries,
             'selectedDate' => $selectedDate,
+            'selectedDateDisplay' => $selectedDateDisplay,
         ]);
     }
 
@@ -297,12 +326,22 @@ class OrderController extends Controller
     public function details(Request $request, Order $order): JsonResponse
     {
         $user = $request->user();
-        if (! $user || (method_exists($user, 'isAdmin') && $user->isAdmin())) {
-            abort(403);
+        if (! $user) {
+            return response()->json([
+                'message' => 'Unauthorized.',
+            ], 401);
+        }
+
+        if (method_exists($user, 'isAdmin') && $user->isAdmin()) {
+            return response()->json([
+                'message' => 'Forbidden.',
+            ], 403);
         }
 
         if ((int) $order->created_by !== (int) $user->id) {
-            abort(403);
+            return response()->json([
+                'message' => 'You are not allowed to view this order.',
+            ], 403);
         }
 
         $order->load([
@@ -311,8 +350,11 @@ class OrderController extends Controller
             'activeItems.product:id,size',
         ]);
 
+        $payload = $this->orderToPayload($order);
+
         return response()->json([
-            'order' => $this->orderToPayload($order),
+            'order' => $payload,
+            'items' => $payload['items'] ?? [],
         ]);
     }
 
@@ -498,17 +540,20 @@ class OrderController extends Controller
     private function orderToPayload(Order $order): array
     {
         $total = (float) ($order->total_amount ?? $order->total ?? 0);
+        $change = $order->change_amount !== null ? (float) $order->change_amount : null;
 
         return [
             'id' => (int) $order->id,
             'order_number' => (string) $order->order_number,
-            'created_at' => $order->created_at?->format('Y-m-d H:i') ?? null,
+            'created_at' => $this->formatHumanDateTime($order->created_at ? Carbon::instance($order->created_at) : null),
+            'created_at_raw' => $order->created_at?->toIso8601String(),
             'staff_name' => $order->creator?->name,
             'customer_name' => $order->customer_name,
             'status' => (string) $order->status,
             'payment_type' => (string) ($order->payment_type ?? ''),
             'cash_received' => $order->cash_received !== null ? (float) $order->cash_received : null,
-            'change_amount' => $order->change_amount !== null ? (float) $order->change_amount : null,
+            'change_amount' => $change,
+            'change' => $change,
             'total' => $total,
             'items' => $order->activeItems->map(function (OrderItem $i) {
                 return [
@@ -516,6 +561,7 @@ class OrderController extends Controller
                     'name' => (string) $i->name,
                     'size' => $i->product?->size,
                     'quantity' => (int) $i->quantity,
+                    'qty' => (int) $i->quantity,
                     'price' => (float) $i->price,
                     'line_total' => (float) $i->line_total,
                 ];

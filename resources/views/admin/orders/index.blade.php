@@ -54,7 +54,7 @@
                     <tbody class="divide-y divide-white/10">
                         @forelse ($summaries as $row)
                             <tr>
-                                <td class="px-5 py-4 font-medium">{{ $row['date'] }}</td>
+                                <td class="px-5 py-4 font-medium">{{ $row['date_display'] ?? $row['date'] }}</td>
                                 <td class="px-5 py-4 text-white/70">{{ $row['staff_name'] }}</td>
                                 <td class="px-5 py-4 text-white/70">{{ number_format((int) $row['total_orders']) }}</td>
                                 <td class="px-5 py-4 text-white/70">{{ number_format((int) $row['total_items']) }}</td>
@@ -90,7 +90,7 @@
                 <div class="sticky top-0 z-10 flex items-center justify-between border-b border-white/10 bg-[#111] px-6 py-4">
                     <div class="min-w-0">
                         <div class="text-lg font-semibold truncate">Daily Sales Details</div>
-                        <div class="mt-0.5 text-xs text-white/60" x-text="dailyPayload ? (dailyPayload.date + ' — ' + dailyPayload.staff.name) : ''"></div>
+                        <div class="mt-0.5 text-xs text-white/60" x-text="dailyPayload ? ((dailyPayload.date_display || dailyPayload.date) + ' — ' + dailyPayload.staff.name) : ''"></div>
                     </div>
                     <button type="button" class="inline-flex h-9 w-9 items-center justify-center rounded-xl border border-white/10 bg-white/5 text-white/80 hover:bg-white/10" x-on:click="closeDaily()">
                         ✕
@@ -143,7 +143,7 @@
                                                 </div>
 
                                                 <div class="mt-1 text-xs text-white/60">
-                                                    Time: <span class="text-white/80" x-text="order.created_at ? order.created_at.substring(11) : '—'"></span>
+                                                    Created: <span class="text-white/80" x-text="order.created_at || '—'"></span>
                                                     <span class="text-white/30">•</span>
                                                     Status: <span class="text-white/80" x-text="order.status"></span>
                                                     <span class="text-white/30">•</span>

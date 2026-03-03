@@ -19,6 +19,22 @@ class AppServiceProvider extends ServiceProvider
      */
     public function boot(): void
     {
-        //
+        if (app()->runningInConsole()) {
+            return;
+        }
+
+        if (file_exists(public_path('hot'))) {
+            return;
+        }
+
+        $request = request();
+        if (! $request) {
+            return;
+        }
+
+        $assetBaseUrl = rtrim($request->getSchemeAndHttpHost() . $request->getBasePath(), '/');
+        if ($assetBaseUrl !== '') {
+            config(['app.asset_url' => $assetBaseUrl]);
+        }
     }
 }

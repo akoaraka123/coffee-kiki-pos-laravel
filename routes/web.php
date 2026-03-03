@@ -38,6 +38,7 @@ Route::prefix('admin')
         Route::get('/orders/{order}', [AdminOrderController::class, 'show'])->name('orders.show');
 
         Route::get('/products', [AdminProductController::class, 'index'])->name('products.index');
+        Route::get('/products/json', [AdminProductController::class, 'indexJson'])->name('products.index-json');
         Route::get('/products/create', [AdminProductController::class, 'create'])->name('products.create');
         Route::post('/products', [AdminProductController::class, 'store'])->name('products.store');
         Route::get('/products/{product}/edit', [AdminProductController::class, 'edit'])->name('products.edit');
@@ -46,6 +47,7 @@ Route::prefix('admin')
         Route::delete('/products/{product}', [AdminProductController::class, 'destroy'])->name('products.destroy');
 
         Route::get('/categories', [AdminCategoryController::class, 'index'])->name('categories.index');
+        Route::get('/categories/json', [AdminCategoryController::class, 'indexJson'])->name('categories.index-json');
         Route::put('/categories', [AdminCategoryController::class, 'update'])->name('categories.update');
         Route::delete('/categories', [AdminCategoryController::class, 'destroy'])->name('categories.destroy');
 

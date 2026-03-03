@@ -44,7 +44,7 @@
                                         {{ $user->role }}
                                     </span>
                                 </td>
-                                <td class="px-5 py-4 text-white/70">{{ $user->created_at->format('Y-m-d') }}</td>
+                                <td class="px-5 py-4 text-white/70">{{ $user->created_at->format('F j, Y (l)') }}</td>
                                 <td class="px-5 py-4 text-right">
                                     <div class="flex items-center justify-end gap-4">
                                         <a href="{{ route('admin.users.edit', $user) }}" class="text-xs text-white/70 hover:text-white underline decoration-white/20">Edit</a>

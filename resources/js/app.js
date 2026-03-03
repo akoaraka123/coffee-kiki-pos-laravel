@@ -63,10 +63,23 @@ Alpine.data('orderHistory', () => ({
         this.errorMessage = '';
         this.selectedOrder = null;
         this.cancelEdit();
+
+        if (typeof document !== 'undefined' && document.body) {
+            document.body.classList.remove('overflow-hidden');
+        }
     },
 
     async openOrder(orderId) {
         this.modalOpen = true;
+
+        if (typeof document !== 'undefined' && document.body) {
+            document.body.classList.add('overflow-hidden');
+        }
+
+        await this.fetchOrderDetails(orderId);
+    },
+
+    async fetchOrderDetails(orderId) {
         this.loading = true;
         this.errorMessage = '';
         this.selectedOrder = null;
@@ -83,18 +96,25 @@ Alpine.data('orderHistory', () => ({
             });
 
             const contentType = (res.headers.get('content-type') || '').toLowerCase();
-            const data = await res.json().catch(() => null);
+            const isJson = contentType.includes('application/json');
+            const data = isJson ? await res.json().catch(() => ({})) : {};
+
             if (!res.ok) {
-                this.errorMessage = (data && data.message) ? data.message : 'Failed to load order details.';
+                this.errorMessage = data.message || 'Failed to load order details.';
                 return;
             }
 
-            if (!contentType.includes('application/json') || !data || !data.order) {
+            if (!data || !data.order) {
                 this.errorMessage = 'Unexpected response while loading order details. Please refresh the page and try again.';
                 return;
             }
 
-            this.selectedOrder = data.order;
+            const order = data.order;
+            if (Array.isArray(data.items)) {
+                order.items = data.items;
+            }
+
+            this.selectedOrder = order;
         } catch (e) {
             this.errorMessage = 'Failed to load order details.';
         } finally {
@@ -215,6 +235,7 @@ Alpine.data('orderHistory', () => ({
             this.errorMessage = 'Failed to delete item.';
         }
     },
+
 }));
 
 Alpine.data('adminOrders', () => ({
@@ -275,4 +296,658 @@ Alpine.data('adminOrders', () => ({
     },
 }));
 
-Alpine.start();
+Alpine.data('adminProductsIndex', () => ({
+    searchQuery: '',
+    groups: [],
+    activeTab: 'all',
+
+    toastMessage: '',
+    toastTimer: null,
+
+    csrfToken: null,
+
+    editModalOpen: false,
+    editSaving: false,
+    editError: '',
+    editErrors: {},
+    editCategories: [],
+
+    addModalOpen: false,
+    addSaving: false,
+    addError: '',
+    addErrors: {},
+    addImageFile: null,
+    addImagePreviewUrl: '',
+    addForm: {
+        name: '',
+        category: '',
+        new_category: '',
+        is_active: true,
+        sizes: [{ size: '', price: '' }],
+    },
+
+    categoriesModalOpen: false,
+    categoriesLoading: false,
+    categoriesError: '',
+    categoriesRows: [],
+
+    editForm: {
+        id: null,
+        key: '',
+        name: '',
+        category: '',
+        new_category: '',
+        image: '',
+        is_active: false,
+        sizes: [{ size: '', price: '' }],
+    },
+    editImageFile: null,
+    editImagePreviewUrl: '',
+
+    init() {
+        const meta = document.querySelector('meta[name="csrf-token"]');
+        this.csrfToken = meta ? meta.getAttribute('content') : null;
+
+        this.refreshGroups();
+    },
+
+    get categoryOptions() {
+        const set = new Set();
+        (this.groups || []).forEach(g => {
+            const raw = String(g?.product?.category || '').trim();
+            if (raw) set.add(raw);
+        });
+        return Array.from(set.values()).sort((a, b) => a.localeCompare(b));
+    },
+
+    showToast(message) {
+        this.toastMessage = String(message || '').trim();
+        if (this.toastTimer) {
+            try { clearTimeout(this.toastTimer); } catch (e) {}
+        }
+        if (!this.toastMessage) return;
+        this.toastTimer = setTimeout(() => {
+            this.toastMessage = '';
+            this.toastTimer = null;
+        }, 2500);
+    },
+
+    setScrollLocked(locked) {
+        if (typeof document === 'undefined' || !document.body) return;
+        if (locked) {
+            document.body.classList.add('overflow-hidden');
+        } else {
+            document.body.classList.remove('overflow-hidden');
+        }
+    },
+
+    normalizeCategory(value) {
+        return String(value || '')
+            .trim()
+            .toLowerCase()
+            .replace(/\s+/g, '_')
+            .replace(/-+/g, '_');
+    },
+
+    displayCategory(value) {
+        const v = String(value || '').trim();
+        if (!v) return 'Uncategorized';
+        return v
+            .replace(/[_-]+/g, ' ')
+            .replace(/\s+/g, ' ')
+            .trim()
+            .replace(/\b\w/g, c => c.toUpperCase());
+    },
+
+    get categories() {
+        const map = new Map();
+        (this.groups || []).forEach(item => {
+            const raw = item?.product?.category;
+            const key = this.normalizeCategory(raw);
+            if (!key) return;
+            if (!map.has(key)) {
+                map.set(key, { key, label: this.displayCategory(raw) });
+            }
+        });
+        return Array.from(map.values());
+    },
+
+    formatPrice(value) {
+        const n = Number(value || 0);
+        return n.toFixed(2);
+    },
+
+    filteredGroups() {
+        const q = String(this.searchQuery || '').trim().toLowerCase();
+        const base = (this.groups || []).filter(item => {
+            if (this.activeTab === 'all') return true;
+            const catKey = this.normalizeCategory(item?.product?.category);
+            return catKey === this.activeTab;
+        });
+
+        if (!q || q.length < 2) return base;
+
+        return base.filter(item => {
+            const name = String(item.product?.name || '').toLowerCase();
+            const category = String(item.product?.category || '').toLowerCase();
+            return name.includes(q) || category.includes(q);
+        });
+    },
+
+    confirmDelete(e) {
+        const ok = confirm('Are you sure you want to delete this product?');
+        if (!ok) return;
+        e.target.submit();
+    },
+
+    fieldError(field) {
+        const v = this.editErrors?.[field];
+        if (!v) return '';
+        if (Array.isArray(v)) return v.join(' ');
+        return String(v);
+    },
+
+    fieldErrorFrom(errorsObj, field) {
+        const v = errorsObj?.[field];
+        if (!v) return '';
+        if (Array.isArray(v)) return v.join(' ');
+        return String(v);
+    },
+
+    editImagePreviewSrc() {
+        if (this.editImagePreviewUrl) return this.editImagePreviewUrl;
+        if (this.editForm.image) return (window.__assetBaseUrl || '/') + this.editForm.image;
+        return (window.__assetBaseUrl || '/') + 'images/coffee-doodle.png';
+    },
+
+    onImageChange(e) {
+        const file = e?.target?.files?.[0];
+        this.editImageFile = file || null;
+        if (this.editImagePreviewUrl) {
+            try { URL.revokeObjectURL(this.editImagePreviewUrl); } catch (err) {}
+        }
+        this.editImagePreviewUrl = file ? URL.createObjectURL(file) : '';
+    },
+
+    closeEdit() {
+        this.editModalOpen = false;
+        this.editSaving = false;
+        this.editError = '';
+        this.editErrors = {};
+        this.editCategories = [];
+        this.editForm = {
+            id: null,
+            key: '',
+            name: '',
+            category: '',
+            new_category: '',
+            image: '',
+            is_active: false,
+            sizes: [{ size: '', price: '' }],
+        };
+        this.editImageFile = null;
+        if (this.editImagePreviewUrl) {
+            try { URL.revokeObjectURL(this.editImagePreviewUrl); } catch (err) {}
+        }
+        this.editImagePreviewUrl = '';
+        if (this.$refs?.imageInput) {
+            this.$refs.imageInput.value = '';
+        }
+
+        this.setScrollLocked(false);
+    },
+
+    addSizeRow() {
+        this.editForm.sizes.push({ size: '', price: '' });
+    },
+
+    removeSizeRow(idx) {
+        if (this.editForm.sizes.length <= 1) return;
+        const ok = confirm('Are you sure you want to delete this size?');
+        if (!ok) return;
+        this.editForm.sizes.splice(idx, 1);
+    },
+
+    async openEdit(item) {
+        this.editError = '';
+        this.editErrors = {};
+        if (!item?.product?.id) {
+            this.editError = 'Unable to open editor.';
+            return;
+        }
+        this.editModalOpen = true;
+        this.setScrollLocked(true);
+
+        try {
+            const url = `/admin/products/${encodeURIComponent(item.product.id)}/edit-data`;
+            const res = await fetch(url, {
+                headers: {
+                    'Accept': 'application/json',
+                    'X-Requested-With': 'XMLHttpRequest',
+                },
+                credentials: 'same-origin',
+            });
+
+            if (!res.ok) {
+                this.editError = 'Failed to load product data.';
+                return;
+            }
+
+            const data = await res.json().catch(() => ({}));
+            const group = data?.group;
+            const product = group?.product;
+
+            this.editCategories = Array.isArray(data?.categories) ? data.categories : [];
+            this.editForm.id = product?.id ?? item.product.id;
+            this.editForm.key = group?.key || item.key;
+            this.editForm.name = product?.name || item.product.name || '';
+            this.editForm.category = product?.category || item.product.category || '';
+            this.editForm.new_category = '';
+            this.editForm.image = product?.image || item.product.image || '';
+            this.editForm.is_active = !!product?.is_active;
+            this.editForm.sizes = Array.isArray(group?.sizes) && group.sizes.length > 0
+                ? group.sizes.map(s => ({ size: s.size || 'Regular', price: String(s.price ?? '') }))
+                : [{ size: '', price: '' }];
+        } catch (err) {
+            this.editError = 'Failed to load product data.';
+        }
+    },
+
+    upsertGroup(oldKey, newGroup) {
+        if (!newGroup) return;
+        const newKey = newGroup.key;
+        const next = (this.groups || []).filter(g => g.key !== oldKey);
+        const existingIndex = next.findIndex(g => g.key === newKey);
+
+        if (existingIndex >= 0) {
+            next[existingIndex] = newGroup;
+        } else {
+            next.unshift(newGroup);
+        }
+
+        this.groups = next;
+    },
+
+    async saveEdit() {
+        if (this.editSaving) return;
+        this.editSaving = true;
+        this.editError = '';
+        this.editErrors = {};
+
+        try {
+            const id = this.editForm.id;
+            const url = `/admin/products/${encodeURIComponent(id)}`;
+
+            const fd = new FormData();
+            fd.append('_method', 'PUT');
+            if (this.csrfToken) {
+                fd.append('_token', this.csrfToken);
+            }
+            fd.append('name', this.editForm.name || '');
+            fd.append('category', this.editForm.category || '');
+            fd.append('new_category', this.editForm.new_category || '');
+            if (this.editForm.is_active) {
+                fd.append('is_active', '1');
+            }
+
+            (this.editForm.sizes || []).forEach(row => {
+                fd.append('sizes[]', row?.size ?? '');
+                fd.append('prices[]', row?.price ?? '');
+            });
+
+            if (this.editImageFile) {
+                fd.append('image', this.editImageFile);
+            }
+
+            const res = await fetch(url, {
+                method: 'POST',
+                body: fd,
+                headers: {
+                    'Accept': 'application/json',
+                    'X-Requested-With': 'XMLHttpRequest',
+                },
+                credentials: 'same-origin',
+            });
+
+            if (res.status === 422) {
+                const data = await res.json().catch(() => ({}));
+                this.editErrors = data?.errors || {};
+                this.editSaving = false;
+                return;
+            }
+
+            if (!res.ok) {
+                const data = await res.json().catch(() => ({}));
+                this.editError = data?.message || 'Failed to save changes.';
+                this.editSaving = false;
+                return;
+            }
+
+            const data = await res.json().catch(() => ({}));
+            const group = data?.group;
+            const oldKey = data?.oldKey || this.editForm.key;
+
+            if (group) {
+                this.upsertGroup(oldKey, group);
+            }
+
+            this.editSaving = false;
+            this.closeEdit();
+            this.showToast(data?.message || 'Saved.');
+        } catch (err) {
+            this.editError = 'Failed to save changes.';
+            this.editSaving = false;
+        }
+    },
+
+    resetAddForm() {
+        this.addSaving = false;
+        this.addError = '';
+        this.addErrors = {};
+        this.addForm = {
+            name: '',
+            category: '',
+            new_category: '',
+            is_active: true,
+            sizes: [{ size: '', price: '' }],
+        };
+        this.addImageFile = null;
+        if (this.addImagePreviewUrl) {
+            try { URL.revokeObjectURL(this.addImagePreviewUrl); } catch (err) {}
+        }
+        this.addImagePreviewUrl = '';
+        if (this.$refs?.addImageInput) {
+            this.$refs.addImageInput.value = '';
+        }
+    },
+
+    openAddModal() {
+        this.resetAddForm();
+        this.addModalOpen = true;
+        this.setScrollLocked(true);
+    },
+
+    closeAddModal() {
+        this.addModalOpen = false;
+        this.addSaving = false;
+        this.setScrollLocked(false);
+    },
+
+    addImagePreviewSrc() {
+        if (this.addImagePreviewUrl) return this.addImagePreviewUrl;
+        return (window.__assetBaseUrl || '/') + 'images/coffee-doodle.png';
+    },
+
+    onAddImageChange(e) {
+        const file = e?.target?.files?.[0];
+        this.addImageFile = file || null;
+        if (this.addImagePreviewUrl) {
+            try { URL.revokeObjectURL(this.addImagePreviewUrl); } catch (err) {}
+        }
+        this.addImagePreviewUrl = file ? URL.createObjectURL(file) : '';
+    },
+
+    addAddSizeRow() {
+        this.addForm.sizes.push({ size: '', price: '' });
+    },
+
+    removeAddSizeRow(idx) {
+        if (this.addForm.sizes.length <= 1) return;
+        const ok = confirm('Are you sure you want to delete this size?');
+        if (!ok) return;
+        this.addForm.sizes.splice(idx, 1);
+    },
+
+    async submitAddProduct() {
+        if (this.addSaving) return;
+        this.addSaving = true;
+        this.addError = '';
+        this.addErrors = {};
+
+        try {
+            const fd = new FormData();
+            if (this.csrfToken) {
+                fd.append('_token', this.csrfToken);
+            }
+            fd.append('name', this.addForm.name || '');
+            fd.append('category', this.addForm.category || '');
+            fd.append('new_category', this.addForm.new_category || '');
+            if (this.addForm.is_active) {
+                fd.append('is_active', '1');
+            }
+
+            (this.addForm.sizes || []).forEach(row => {
+                fd.append('sizes[]', row?.size ?? '');
+                fd.append('prices[]', row?.price ?? '');
+            });
+
+            if (this.addImageFile) {
+                fd.append('image', this.addImageFile);
+            }
+
+            const res = await fetch('/admin/products', {
+                method: 'POST',
+                body: fd,
+                headers: {
+                    'Accept': 'application/json',
+                    'X-Requested-With': 'XMLHttpRequest',
+                },
+                credentials: 'same-origin',
+            });
+
+            if (res.status === 422) {
+                const data = await res.json().catch(() => ({}));
+                this.addErrors = data?.errors || {};
+                this.addSaving = false;
+                return;
+            }
+
+            const data = await res.json().catch(() => ({}));
+            if (!res.ok) {
+                this.addError = data?.message || 'Failed to create product.';
+                this.addSaving = false;
+                return;
+            }
+
+            const group = data?.group;
+            if (group) {
+                this.upsertGroup(null, group);
+            }
+
+            this.addSaving = false;
+            this.closeAddModal();
+            this.showToast(data?.message || 'Product created.');
+        } catch (err) {
+            this.addError = 'Failed to create product.';
+            this.addSaving = false;
+        }
+    },
+
+    async refreshGroups() {
+        try {
+            const res = await fetch('/admin/products/json', {
+                headers: {
+                    'Accept': 'application/json',
+                    'X-Requested-With': 'XMLHttpRequest',
+                },
+                credentials: 'same-origin',
+            });
+            if (!res.ok) return;
+            const data = await res.json().catch(() => ({}));
+            if (Array.isArray(data?.groups)) {
+                this.groups = data.groups;
+            }
+        } catch (e) {}
+    },
+
+    async openCategoriesModal() {
+        this.categoriesModalOpen = true;
+        this.categoriesLoading = true;
+        this.categoriesError = '';
+        this.categoriesRows = [];
+        this.setScrollLocked(true);
+
+        try {
+            const res = await fetch('/admin/categories/json', {
+                headers: {
+                    'Accept': 'application/json',
+                    'X-Requested-With': 'XMLHttpRequest',
+                },
+                credentials: 'same-origin',
+            });
+
+            if (!res.ok) {
+                this.categoriesError = 'Failed to load categories.';
+                this.categoriesLoading = false;
+                return;
+            }
+
+            const data = await res.json().catch(() => ({}));
+            const cats = Array.isArray(data?.categories) ? data.categories : [];
+            const counts = data?.counts || {};
+            this.categoriesRows = cats.map(c => ({
+                key: String(c),
+                oldName: String(c),
+                newName: String(c),
+                count: Number(counts?.[c] || 0),
+                saving: false,
+                deleting: false,
+                confirmingDelete: false,
+                error: '',
+            }));
+            this.categoriesLoading = false;
+        } catch (err) {
+            this.categoriesError = 'Failed to load categories.';
+            this.categoriesLoading = false;
+        }
+    },
+
+    closeCategoriesModal() {
+        this.categoriesModalOpen = false;
+        this.categoriesLoading = false;
+        this.categoriesError = '';
+        this.categoriesRows = [];
+        this.setScrollLocked(false);
+    },
+
+    async applyCategoriesPayload(payload) {
+        const cats = Array.isArray(payload?.categories) ? payload.categories : [];
+        const counts = payload?.counts || {};
+        this.categoriesRows = cats.map(c => ({
+            key: String(c),
+            oldName: String(c),
+            newName: String(c),
+            count: Number(counts?.[c] || 0),
+            saving: false,
+            deleting: false,
+            confirmingDelete: false,
+            error: '',
+        }));
+        await this.refreshGroups();
+    },
+
+    async saveCategory(cat) {
+        if (!cat || cat.saving) return;
+        cat.error = '';
+        const oldName = String(cat.oldName || '').trim();
+        const newName = String(cat.newName || '').trim();
+        if (!oldName || !newName) {
+            cat.error = 'Category name is required.';
+            return;
+        }
+        cat.saving = true;
+
+        try {
+            const res = await fetch('/admin/categories', {
+                method: 'PUT',
+                headers: {
+                    'Accept': 'application/json',
+                    'Content-Type': 'application/json',
+                    'X-Requested-With': 'XMLHttpRequest',
+                    ...(this.csrfToken ? { 'X-CSRF-TOKEN': this.csrfToken } : {}),
+                },
+                credentials: 'same-origin',
+                body: JSON.stringify({
+                    old_category: oldName,
+                    new_category: newName,
+                }),
+            });
+
+            if (res.status === 422) {
+                const data = await res.json().catch(() => ({}));
+                const errs = data?.errors || {};
+                cat.error = Array.isArray(errs?.new_category) ? errs.new_category.join(' ') : (errs?.new_category || 'Validation failed.');
+                cat.saving = false;
+                return;
+            }
+
+            const data = await res.json().catch(() => ({}));
+            if (!res.ok) {
+                cat.error = data?.message || 'Failed to update category.';
+                cat.saving = false;
+                return;
+            }
+
+            await this.applyCategoriesPayload(data);
+            this.showToast('Category updated.');
+        } catch (err) {
+            cat.error = 'Failed to update category.';
+        } finally {
+            cat.saving = false;
+        }
+    },
+
+    async deleteCategory(cat) {
+        if (!cat || cat.deleting) return;
+        const name = String(cat.oldName || '').trim();
+        if (!name) return;
+        cat.deleting = true;
+        cat.error = '';
+
+        try {
+            const res = await fetch('/admin/categories', {
+                method: 'DELETE',
+                headers: {
+                    'Accept': 'application/json',
+                    'Content-Type': 'application/json',
+                    'X-Requested-With': 'XMLHttpRequest',
+                    ...(this.csrfToken ? { 'X-CSRF-TOKEN': this.csrfToken } : {}),
+                },
+                credentials: 'same-origin',
+                body: JSON.stringify({ category: name }),
+            });
+
+            if (res.status === 422) {
+                const data = await res.json().catch(() => ({}));
+                const errs = data?.errors || {};
+                cat.error = Array.isArray(errs?.category) ? errs.category.join(' ') : (errs?.category || 'Validation failed.');
+                cat.deleting = false;
+                return;
+            }
+
+            const data = await res.json().catch(() => ({}));
+            if (!res.ok) {
+                cat.error = data?.message || 'Failed to delete category.';
+                cat.deleting = false;
+                return;
+            }
+
+            await this.applyCategoriesPayload(data);
+            this.showToast('Category deleted.');
+        } catch (err) {
+            cat.error = 'Failed to delete category.';
+        } finally {
+            cat.deleting = false;
+        }
+    },
+}));
+
+try {
+    Alpine.start();
+    window.__alpineStarted = true;
+    window.__alpineStartError = null;
+} catch (e) {
+    window.__alpineStarted = false;
+    window.__alpineStartError = e;
+    console.error('Alpine.start failed', e);
+}

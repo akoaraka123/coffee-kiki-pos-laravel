@@ -13,6 +13,18 @@ use Illuminate\View\View;
 
 class AdminOrderController extends Controller
 {
+    private const DISPLAY_TIMEZONE = 'Asia/Manila';
+
+    private function formatHumanDate(?Carbon $dt): ?string
+    {
+        return $dt ? $dt->copy()->setTimezone(self::DISPLAY_TIMEZONE)->format('F j, Y (l)') : null;
+    }
+
+    private function formatHumanDateTime(?Carbon $dt): ?string
+    {
+        return $dt ? $dt->copy()->setTimezone(self::DISPLAY_TIMEZONE)->format('F j, Y (l) – g:i A') : null;
+    }
+
     public function index(Request $request): View
     {
         $staffId = $request->string('staff')->toString();
@@ -89,8 +101,17 @@ class AdminOrderController extends Controller
             $key = (string) $g->order_date . '||' . (string) $g->created_by;
             $staff = $staffMap->get((string) $g->created_by);
 
+            $dateRaw = (string) $g->order_date;
+            $dateDisplay = $dateRaw;
+            try {
+                $dateDisplay = Carbon::parse($dateRaw)->format('F j, Y (l)');
+            } catch (\Throwable $e) {
+                $dateDisplay = $dateRaw;
+            }
+
             return [
-                'date' => (string) $g->order_date,
+                'date' => $dateRaw,
+                'date_display' => $dateDisplay,
                 'staff_id' => (string) $g->created_by,
                 'staff_name' => $staff?->name ?? '—',
                 'total_orders' => (int) ($g->total_orders ?? 0),
@@ -163,8 +184,16 @@ class AdminOrderController extends Controller
             ->flatMap(fn (Order $o) => $o->items)
             ->sum('quantity');
 
+        $dateDisplay = $date;
+        try {
+            $dateDisplay = Carbon::parse($date)->format('F j, Y (l)');
+        } catch (\Throwable $e) {
+            $dateDisplay = $date;
+        }
+
         return view('admin.orders.details', [
             'date' => $date,
+            'dateDisplay' => $dateDisplay,
             'staff' => $staff,
             'orders' => $orders,
             'totalOrders' => $totalOrders,
@@ -216,8 +245,16 @@ class AdminOrderController extends Controller
             ->flatMap(fn (Order $o) => $o->items->whereNull('deleted_at'))
             ->sum('quantity');
 
+        $dateDisplay = $date;
+        try {
+            $dateDisplay = Carbon::parse($date)->format('F j, Y (l)');
+        } catch (\Throwable $e) {
+            $dateDisplay = $date;
+        }
+
         return response()->json([
             'date' => $date,
+            'date_display' => $dateDisplay,
             'staff' => [
                 'id' => (int) $staff->id,
                 'name' => (string) $staff->name,
@@ -232,7 +269,8 @@ class AdminOrderController extends Controller
                 return [
                     'id' => (int) $o->id,
                     'order_number' => (string) $o->order_number,
-                    'created_at' => $o->created_at?->format('Y-m-d H:i') ?? null,
+                    'created_at' => $this->formatHumanDateTime($o->created_at ? Carbon::instance($o->created_at) : null),
+                    'created_at_raw' => $o->created_at?->toIso8601String(),
                     'status' => (string) $o->status,
                     'payment_type' => (string) ($o->payment_type ?? ''),
                     'cash_received' => $o->cash_received !== null ? (float) $o->cash_received : null,
@@ -248,13 +286,15 @@ class AdminOrderController extends Controller
                             'quantity' => (int) $i->quantity,
                             'price' => (float) $i->price,
                             'line_total' => (float) $i->line_total,
-                            'deleted_at' => $i->deleted_at?->format('Y-m-d H:i'),
+                            'deleted_at' => $this->formatHumanDateTime($i->deleted_at ? Carbon::instance($i->deleted_at) : null),
+                            'deleted_at_raw' => $i->deleted_at?->toIso8601String(),
                         ];
                     })->values()->all(),
                     'activities' => $o->activities->map(function ($a) {
                         return [
                             'id' => (int) $a->id,
-                            'created_at' => $a->created_at?->format('Y-m-d H:i') ?? null,
+                            'created_at' => $this->formatHumanDateTime($a->created_at ? Carbon::instance($a->created_at) : null),
+                            'created_at_raw' => $a->created_at?->toIso8601String(),
                             'actor_name' => $a->actor?->name,
                             'action' => (string) $a->action,
                             'note' => $a->note,
