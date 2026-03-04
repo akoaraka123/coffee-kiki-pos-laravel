@@ -10,13 +10,13 @@
                 <p class="mt-1 text-sm text-white/50">Create, edit, and remove products shown in the POS menu.</p>
             </div>
 
-            <div class="flex items-center gap-3">
-                <button type="button" x-on:click.prevent.stop="openCategoriesModal()" class="inline-flex items-center justify-center rounded-xl border border-white/10 bg-white/5 px-4 py-2 text-sm font-semibold text-white/80 shadow-sm hover:bg-white/10">
+            <div class="relative z-10 flex items-center gap-3">
+                <a href="{{ route('admin.categories.index') }}" x-on:click.prevent.stop="openCategoriesModal()" class="pointer-events-auto inline-flex items-center justify-center rounded-xl border border-white/10 bg-white/5 px-4 py-2 text-sm font-semibold text-white/80 shadow-sm hover:bg-white/10">
                     Manage Categories
-                </button>
-                <button type="button" x-on:click.prevent.stop="openAddModal()" class="inline-flex items-center justify-center rounded-xl bg-[#efe9df] px-4 py-2 text-sm font-semibold text-[#1c1c1c] shadow-sm hover:opacity-95">
+                </a>
+                <a href="{{ route('admin.products.create') }}" x-on:click.prevent.stop="openAddModal()" class="pointer-events-auto inline-flex items-center justify-center rounded-xl bg-[#efe9df] px-4 py-2 text-sm font-semibold text-[#1c1c1c] shadow-sm hover:opacity-95">
                     Add Product
-                </button>
+                </a>
             </div>
         </div>
 
@@ -102,10 +102,11 @@
             No products found.
         </div>
 
-        <div class="fixed inset-0 z-50" x-show="editModalOpen" x-on:keydown.escape.window="closeEdit()">
-            <div class="absolute inset-0 bg-black/70" x-transition.opacity x-on:click="closeEdit()"></div>
-            <div class="absolute inset-0 grid place-items-center px-4">
-                <div class="w-[min(92vw,44rem)] rounded-2xl border border-white/10 bg-[#111] shadow-2xl max-h-[85vh] overflow-hidden" x-transition x-on:click.stop>
+        <template x-if="editModalOpen">
+            <div class="fixed inset-0 z-50" x-on:keydown.escape.window="closeEdit()">
+                <div class="absolute inset-0 bg-black/70" x-transition.opacity x-on:click="closeEdit()"></div>
+                <div class="absolute inset-0 grid place-items-center px-4">
+                    <div class="w-[min(92vw,44rem)] rounded-2xl border border-white/10 bg-[#111] shadow-2xl max-h-[85vh] overflow-hidden" x-transition x-on:click.stop>
                     <div class="flex items-start justify-between gap-4 border-b border-white/10 px-5 py-4">
                         <div class="min-w-0">
                             <div class="text-lg font-semibold truncate">Edit Product<span x-show="editForm.name" class="text-white/60"> — <span x-text="editForm.name"></span></span></div>
@@ -222,14 +223,16 @@
                             <div class="mt-1" x-text="editError"></div>
                         </div>
                     </div>
+                    </div>
                 </div>
             </div>
-        </div>
+        </template>
 
-        <div class="fixed inset-0 z-50" x-show="addModalOpen" x-on:keydown.escape.window="closeAddModal()">
-            <div class="absolute inset-0 bg-black/70" x-transition.opacity x-on:click="closeAddModal()"></div>
-            <div class="absolute inset-0 grid place-items-center px-4">
-                <div class="w-full max-w-6xl rounded-2xl border border-white/10 bg-[#111] shadow-2xl max-h-[85vh] overflow-hidden" x-transition x-on:click.stop>
+        <template x-if="addModalOpen">
+            <div class="fixed inset-0 z-50" x-on:keydown.escape.window="closeAddModal()">
+                <div class="absolute inset-0 bg-black/70" x-transition.opacity x-on:click="closeAddModal()"></div>
+                <div class="absolute inset-0 grid place-items-center px-4">
+                    <div class="w-full max-w-6xl rounded-2xl border border-white/10 bg-[#111] shadow-2xl max-h-[85vh] overflow-hidden" x-transition x-on:click.stop>
                     <div class="flex items-start justify-between gap-4 border-b border-white/10 px-6 py-4">
                         <div class="min-w-0">
                             <div class="text-lg font-semibold truncate">Add Product</div>
@@ -339,14 +342,16 @@
                             <span x-show="addSaving">Creating...</span>
                         </button>
                     </div>
+                    </div>
                 </div>
             </div>
-        </div>
+        </template>
 
-        <div class="fixed inset-0 z-50" x-show="categoriesModalOpen" x-on:keydown.escape.window="closeCategoriesModal()">
-            <div class="absolute inset-0 bg-black/70" x-transition.opacity x-on:click="closeCategoriesModal()"></div>
-            <div class="absolute inset-0 grid place-items-center px-4">
-                <div class="w-full max-w-6xl rounded-2xl border border-white/10 bg-[#111] shadow-2xl max-h-[85vh] overflow-hidden" x-transition x-on:click.stop>
+        <template x-if="categoriesModalOpen">
+            <div class="fixed inset-0 z-50" x-on:keydown.escape.window="closeCategoriesModal()">
+                <div class="absolute inset-0 bg-black/70" x-transition.opacity x-on:click="closeCategoriesModal()"></div>
+                <div class="absolute inset-0 grid place-items-center px-4">
+                    <div class="w-full max-w-6xl rounded-2xl border border-white/10 bg-[#111] shadow-2xl max-h-[85vh] overflow-hidden" x-transition x-on:click.stop>
                     <div class="flex items-start justify-between gap-4 border-b border-white/10 px-6 py-4">
                         <div class="min-w-0">
                             <div class="text-lg font-semibold truncate">Manage Categories</div>
@@ -427,6 +432,7 @@
                 </div>
             </div>
         </div>
+        </template>
 
         <div class="fixed bottom-5 right-5 z-[60]" x-show="toastMessage" x-transition.opacity>
             <div class="rounded-xl border border-white/10 bg-[#111] px-4 py-3 text-sm text-white/80 shadow-2xl" x-text="toastMessage"></div>

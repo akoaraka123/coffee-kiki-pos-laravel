@@ -140,18 +140,14 @@
             {{ $orders->links() }}
         </div>
 
-        <div
-            class="fixed inset-0 z-50 flex items-center justify-center px-4"
-            x-show="modalOpen"
-            x-cloak
-            x-on:keydown.escape.window="closeModal()"
-        >
-            <div class="fixed inset-0 bg-black/60 backdrop-blur-sm" x-transition.opacity x-on:click="closeModal()"></div>
+        <template x-if="modalOpen">
+            <div class="fixed inset-0 z-50 flex items-center justify-center px-4" x-on:keydown.escape.window="closeModal()">
+                <div class="fixed inset-0 bg-black/60 backdrop-blur-sm" x-transition.opacity x-on:click="closeModal()"></div>
 
-            <div
-                class="relative w-full max-w-6xl overflow-hidden rounded-2xl border border-white/10 bg-zinc-900 shadow-2xl"
-                x-transition
-            >
+                <div
+                    class="relative w-full max-w-6xl overflow-hidden rounded-2xl border border-white/10 bg-zinc-900 shadow-2xl"
+                    x-transition
+                >
                 <div class="sticky top-0 z-10 flex items-center justify-between gap-4 border-b border-white/10 bg-zinc-900/95 px-6 py-4 backdrop-blur">
                     <div class="min-w-0">
                         <div class="truncate text-lg font-semibold">Order Details</div>
@@ -288,6 +284,8 @@
                     </button>
                 </div>
             </div>
-        </div>
+
+            </div>
+        </template>
 
 @endsection

@@ -56,7 +56,9 @@
                 </header>
 
                 <div class="relative w-full flex-1">
-                    <div class="fixed inset-0 z-20 bg-black/60 lg:hidden" x-show="sidebarOpen && !isDesktop" x-transition.opacity x-on:click="sidebarOpen = false"></div>
+                    <template x-if="sidebarOpen && !isDesktop">
+                        <div class="fixed inset-0 z-20 bg-black/60 lg:hidden" x-transition.opacity x-on:click="sidebarOpen = false"></div>
+                    </template>
 
                     <aside
                         class="fixed bottom-0 left-0 top-20 z-30 w-72 shrink-0 border-r border-white/10 bg-gradient-to-b from-[#1b1b1b] to-[#111] transform transition-transform duration-200 ease-in-out lg:translate-x-0 lg:transition-[width] lg:duration-200 lg:ease-in-out"
