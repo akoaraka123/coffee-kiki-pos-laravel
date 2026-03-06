@@ -135,7 +135,7 @@
                 </div>
             </div>
 
-            <form method="POST" action="{{ route('orders.store') }}" class="mt-5 space-y-3" x-on:submit.prevent="startCheckout()">
+            <form id="pos-checkout-form" method="POST" action="{{ route('orders.store') }}" class="mt-5 space-y-3" x-on:submit.prevent="startCheckout()">
                 @csrf
                 <input type="hidden" name="status" value="paid" />
                 <input type="hidden" name="items" x-bind:value="JSON.stringify(payloadItems())" />
@@ -148,6 +148,7 @@
                     name="customer_name"
                     placeholder="Customer name (optional)"
                     class="w-full rounded-xl border border-white/10 bg-[#111] px-4 py-3 text-sm text-white placeholder:text-white/30 focus:outline-none focus:ring-2 focus:ring-white/20"
+                    x-model="customerName"
                     value="{{ old('customer_name') }}"
                 />
 
@@ -197,8 +198,8 @@
                 <button
                     type="button"
                     class="w-full rounded-full bg-[#efe9df] px-4 py-3 text-sm font-semibold text-[#1c1c1c] shadow-lg hover:opacity-95 active:opacity-90"
-                    x-bind:disabled="cart.length === 0"
-                    x-bind:class="cart.length === 0 ? 'opacity-50 cursor-not-allowed' : ''"
+                    x-bind:disabled="cart.length === 0 || isSubmitting"
+                    x-bind:class="(cart.length === 0 || isSubmitting) ? 'opacity-50 cursor-not-allowed' : ''"
                     x-on:click="startCheckout()"
                 >
                     Checkout
@@ -258,7 +259,13 @@
                     <button type="button" class="inline-flex items-center justify-center rounded-xl border border-white/10 bg-white/5 px-4 py-2 text-sm font-semibold text-white/80 hover:bg-white/10" x-on:click="checkoutModal = false">
                         Cancel
                     </button>
-                    <button type="button" class="inline-flex items-center justify-center rounded-xl bg-[#efe9df] px-4 py-2 text-sm font-semibold text-[#1c1c1c] shadow-sm hover:opacity-95" x-on:click="confirmCheckout()">
+                    <button
+                        type="button"
+                        class="inline-flex items-center justify-center rounded-xl bg-[#efe9df] px-4 py-2 text-sm font-semibold text-[#1c1c1c] shadow-sm hover:opacity-95"
+                        x-bind:disabled="isSubmitting"
+                        x-bind:class="isSubmitting ? 'opacity-60 cursor-not-allowed' : ''"
+                        x-on:click="confirmCheckout()"
+                    >
                         Confirm
                     </button>
                 </div>
@@ -266,6 +273,12 @@
             </div>
         </div>
     </template>
+
+    <div class="fixed inset-0 z-[60] grid place-items-center px-4 pointer-events-none" x-show="successOpen" x-cloak x-transition.opacity.duration.150ms>
+        <div class="w-full max-w-sm rounded-2xl border border-white/10 bg-[#111]/95 px-6 py-4 text-center shadow-2xl backdrop-blur">
+            <div class="text-base font-semibold text-white" x-text="successMessage"></div>
+        </div>
+    </div>
 
     <template x-if="productModalOpen">
         <div class="fixed inset-0 z-50" x-on:keydown.escape.window="closeProductModal()">

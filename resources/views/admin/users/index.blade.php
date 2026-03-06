@@ -36,6 +36,9 @@
                     </thead>
                     <tbody class="divide-y divide-white/10">
                         @forelse ($users as $user)
+                            @php
+                                $showEditModal = (int) session('editUserId') === (int) $user->id;
+                            @endphp
                             <tr>
                                 <td class="px-5 py-4">{{ $user->name }}</td>
                                 <td class="px-5 py-4 text-white/70">{{ $user->email }}</td>
@@ -47,7 +50,14 @@
                                 <td class="px-5 py-4 text-white/70">{{ $user->created_at->format('F j, Y (l)') }}</td>
                                 <td class="px-5 py-4 text-right">
                                     <div class="flex items-center justify-end gap-4">
-                                        <a href="{{ route('admin.users.edit', $user) }}" class="text-xs text-white/70 hover:text-white underline decoration-white/20">Edit</a>
+                                        <button
+                                            type="button"
+                                            x-data
+                                            x-on:click="$dispatch('open-modal', 'edit-user-{{ $user->id }}')"
+                                            class="text-xs text-white/70 hover:text-white underline decoration-white/20"
+                                        >
+                                            Edit
+                                        </button>
                                         <form method="POST" action="{{ route('admin.users.destroy', $user) }}" onsubmit="return confirm('Delete this account?');">
                                             @csrf
                                             @method('DELETE')
@@ -56,6 +66,77 @@
                                     </div>
                                 </td>
                             </tr>
+
+                            <x-modal name="edit-user-{{ $user->id }}" :show="$showEditModal" maxWidth="2xl">
+                                <div class="rounded-2xl border border-white/10 bg-[#1b1b1b] p-6 text-white shadow-2xl">
+                                    <div class="flex items-start justify-between gap-4">
+                                        <div>
+                                            <h3 class="text-lg font-semibold">Edit Account</h3>
+                                            <p class="mt-1 text-sm text-white/50">Update account details and role.</p>
+                                        </div>
+                                        <button type="button" x-data x-on:click="$dispatch('close-modal', 'edit-user-{{ $user->id }}')" class="rounded-xl border border-white/10 bg-white/5 px-3 py-2 text-sm text-white/70 hover:bg-white/10 hover:text-white">
+                                            Close
+                                        </button>
+                                    </div>
+
+                                    <form method="POST" action="{{ route('admin.users.update', $user) }}" class="mt-6 space-y-4">
+                                        @csrf
+                                        @method('PUT')
+
+                                        <div class="grid grid-cols-1 gap-4 sm:grid-cols-2">
+                                            <div class="sm:col-span-2">
+                                                <label for="edit-name-{{ $user->id }}" class="text-xs text-white/60">Name</label>
+                                                <input
+                                                    id="edit-name-{{ $user->id }}"
+                                                    name="name"
+                                                    value="{{ $showEditModal ? old('name', $user->name) : $user->name }}"
+                                                    required
+                                                    class="mt-2 w-full rounded-xl border border-white/10 bg-[#111] px-4 py-3 text-white placeholder:text-white/30 focus:outline-none focus:ring-2 focus:ring-white/20"
+                                                />
+                                            </div>
+
+                                            <div class="sm:col-span-2">
+                                                <label for="edit-email-{{ $user->id }}" class="text-xs text-white/60">Email</label>
+                                                <input
+                                                    id="edit-email-{{ $user->id }}"
+                                                    name="email"
+                                                    type="email"
+                                                    value="{{ $showEditModal ? old('email', $user->email) : $user->email }}"
+                                                    required
+                                                    class="mt-2 w-full rounded-xl border border-white/10 bg-[#111] px-4 py-3 text-white placeholder:text-white/30 focus:outline-none focus:ring-2 focus:ring-white/20"
+                                                />
+                                            </div>
+
+                                            <div class="sm:col-span-2">
+                                                <label for="edit-role-{{ $user->id }}" class="text-xs text-white/60">Role</label>
+                                                <select id="edit-role-{{ $user->id }}" name="role" class="mt-2 w-full rounded-xl border border-white/10 bg-[#111] px-4 py-3 text-white focus:outline-none focus:ring-2 focus:ring-white/20">
+                                                    <option value="staff" {{ ($showEditModal ? old('role', $user->role) : $user->role) === 'staff' ? 'selected' : '' }}>Staff</option>
+                                                    <option value="admin" {{ ($showEditModal ? old('role', $user->role) : $user->role) === 'admin' ? 'selected' : '' }}>Admin</option>
+                                                </select>
+                                            </div>
+
+                                            <div>
+                                                <label for="edit-password-{{ $user->id }}" class="text-xs text-white/60">New Password (optional)</label>
+                                                <input id="edit-password-{{ $user->id }}" name="password" type="password" autocomplete="new-password" class="mt-2 w-full rounded-xl border border-white/10 bg-[#111] px-4 py-3 text-white placeholder:text-white/30 focus:outline-none focus:ring-2 focus:ring-white/20" />
+                                            </div>
+
+                                            <div>
+                                                <label for="edit-password-confirmation-{{ $user->id }}" class="text-xs text-white/60">Confirm New Password</label>
+                                                <input id="edit-password-confirmation-{{ $user->id }}" name="password_confirmation" type="password" autocomplete="new-password" class="mt-2 w-full rounded-xl border border-white/10 bg-[#111] px-4 py-3 text-white placeholder:text-white/30 focus:outline-none focus:ring-2 focus:ring-white/20" />
+                                            </div>
+                                        </div>
+
+                                        <div class="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-end">
+                                            <button type="button" x-data x-on:click="$dispatch('close-modal', 'edit-user-{{ $user->id }}')" class="rounded-xl border border-white/10 bg-white/5 px-4 py-2 text-sm font-medium text-white/80 hover:bg-white/10">
+                                                Cancel
+                                            </button>
+                                            <button type="submit" class="rounded-xl bg-[#efe9df] px-4 py-2 text-sm font-semibold text-[#1c1c1c] shadow-sm hover:opacity-95">
+                                                Save Changes
+                                            </button>
+                                        </div>
+                                    </form>
+                                </div>
+                            </x-modal>
                         @empty
                             <tr>
                                 <td class="px-5 py-6 text-white/60" colspan="5">No users found.</td>

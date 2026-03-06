@@ -351,7 +351,7 @@
             <div class="fixed inset-0 z-50" x-on:keydown.escape.window="closeCategoriesModal()">
                 <div class="absolute inset-0 bg-black/70" x-transition.opacity x-on:click="closeCategoriesModal()"></div>
                 <div class="absolute inset-0 grid place-items-center px-4">
-                    <div class="w-full max-w-6xl rounded-2xl border border-white/10 bg-[#111] shadow-2xl max-h-[85vh] overflow-hidden" x-transition x-on:click.stop>
+                    <div class="flex w-full max-w-6xl flex-col rounded-2xl border border-white/10 bg-[#111] shadow-2xl max-h-[85vh] overflow-hidden" x-transition x-on:click.stop>
                     <div class="flex items-start justify-between gap-4 border-b border-white/10 px-6 py-4">
                         <div class="min-w-0">
                             <div class="text-lg font-semibold truncate">Manage Categories</div>
@@ -360,7 +360,7 @@
                         <button type="button" class="grid h-9 w-9 place-items-center rounded-xl border border-white/10 bg-white/5 text-white/80 hover:bg-white/10" x-on:click="closeCategoriesModal()" aria-label="Close" title="Close">✕</button>
                     </div>
 
-                    <div class="px-6 py-5 overflow-y-auto overflow-x-hidden">
+                    <div class="flex-1 px-6 py-5 overflow-y-auto overflow-x-hidden">
                         <template x-if="categoriesLoading">
                             <div class="rounded-xl border border-white/10 bg-white/5 px-4 py-3 text-sm text-white/70">Loading categories...</div>
                         </template>

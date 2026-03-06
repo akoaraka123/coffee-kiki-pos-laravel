@@ -17,10 +17,14 @@ window.posOrder = function posOrder(products) {
         cart: [],
         paymentType: 'cash',
         cashReceived: '',
+        customerName: '',
         checkoutModal: false,
         checkoutError: '',
+        isSubmitting: false,
         toastOpen: false,
         toastMessage: '',
+        successOpen: false,
+        successMessage: '',
         productModalOpen: false,
         modalProduct: null,
         normalizeCategory(value) {
@@ -218,13 +222,9 @@ window.posOrder = function posOrder(products) {
             this.persistCart();
             this.paymentType = 'cash';
             this.cashReceived = '';
+            this.customerName = '';
             this.checkoutModal = false;
             this.checkoutError = '';
-
-            this.$nextTick(() => {
-                const input = this.$root.querySelector('input[name="customer_name"]');
-                if (input) input.value = '';
-            });
         },
         showToast(message) {
             this.toastMessage = message || '';
@@ -233,6 +233,14 @@ window.posOrder = function posOrder(products) {
             this.__toastTimer = window.setTimeout(() => {
                 this.toastOpen = false;
             }, 2500);
+        },
+        showSuccess(message) {
+            this.successMessage = message || '';
+            this.successOpen = true;
+            window.clearTimeout(this.__successTimer);
+            this.__successTimer = window.setTimeout(() => {
+                this.successOpen = false;
+            }, 1000);
         },
         persistCart() {
             try {
@@ -282,6 +290,87 @@ window.posOrder = function posOrder(products) {
             }
 
             this.checkoutModal = true;
+        },
+        async confirmCheckout() {
+            this.checkoutError = '';
+            if (this.isSubmitting) return;
+            if (this.cart.length === 0) {
+                this.checkoutModal = false;
+                return;
+            }
+
+            const total = Number(this.total() || 0);
+
+            if (this.paymentType === 'cash') {
+                const cash = Number(this.cashReceived || 0);
+                if (!Number.isFinite(cash) || cash <= 0) {
+                    this.checkoutError = 'Please enter cash received.';
+                    return;
+                }
+
+                if (cash < total) {
+                    this.checkoutError = 'Insufficient payment amount.';
+                    return;
+                }
+            }
+
+            const form = document.getElementById('pos-checkout-form');
+            if (!form) {
+                this.checkoutError = 'Checkout form not found. Please refresh the page and try again.';
+                return;
+            }
+
+            const action = form.getAttribute('action');
+            if (!action) {
+                this.checkoutError = 'Checkout action not found. Please refresh the page and try again.';
+                return;
+            }
+
+            const token = document.querySelector('meta[name="csrf-token"]')?.getAttribute('content') || null;
+            if (!token) {
+                this.checkoutError = 'Security token not found. Please refresh the page and try again.';
+                return;
+            }
+
+            this.isSubmitting = true;
+            try {
+                const res = await fetch(action, {
+                    method: 'POST',
+                    headers: {
+                        'Accept': 'application/json',
+                        'Content-Type': 'application/json',
+                        'X-Requested-With': 'XMLHttpRequest',
+                        'X-CSRF-TOKEN': token,
+                    },
+                    body: JSON.stringify({
+                        customer_name: (this.customerName || '').trim() || null,
+                        status: 'paid',
+                        items: JSON.stringify(this.payloadItems()),
+                        payment_type: this.paymentType,
+                        cash_received: this.paymentType === 'cash' ? Number(this.cashReceived || 0) : null,
+                        total_amount: Number(this.formatPrice(this.total())),
+                    }),
+                });
+
+                const contentType = (res.headers.get('content-type') || '').toLowerCase();
+                const isJson = contentType.includes('application/json');
+                const data = isJson ? await res.json().catch(() => ({})) : {};
+
+                if (!res.ok) {
+                    const message = data?.message || 'Failed to confirm order.';
+                    const firstError = data?.errors ? Object.values(data.errors)[0]?.[0] : null;
+                    this.checkoutError = firstError || message;
+                    return;
+                }
+
+                const orderNumber = data?.order_number ? String(data.order_number) : '';
+                this.resetAfterCheckout();
+                this.showSuccess(orderNumber ? `Order ${orderNumber} saved.` : 'Order saved.');
+            } catch (e) {
+                this.checkoutError = 'Failed to confirm order. Please check your connection and try again.';
+            } finally {
+                this.isSubmitting = false;
+            }
         },
     };
 };
