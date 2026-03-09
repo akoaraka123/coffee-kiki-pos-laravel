@@ -11,6 +11,7 @@ window.posOrder = function posOrder(initialLayout) {
         sidebarCollapsed: false,
         hoverOpened: false,
         layoutPosition: (initialLayout === 'left') ? 'left' : 'right',
+        clockedIn: true,
         activeTab: 'milk_tea',
         searchQuery: '',
         focusedProductName: '',
@@ -102,6 +103,11 @@ window.posOrder = function posOrder(initialLayout) {
                 this.layoutPosition = fromAttr === 'left' ? 'left' : 'right';
             }
 
+            const clockedAttr = this.$el?.dataset?.clockedIn;
+            if (typeof clockedAttr === 'string') {
+                this.clockedIn = clockedAttr === '1' || clockedAttr.toLowerCase() === 'true';
+            }
+
             this.$watch('searchQuery', (value) => {
                 const q = (value || '').trim().toLowerCase();
                 if (!q) {
@@ -152,6 +158,7 @@ window.posOrder = function posOrder(initialLayout) {
             return (window.__assetBaseUrl || '/') + 'images/coffee-doodle.png';
         },
         openProductModal(product) {
+            if (!this.ensureClockedIn()) return;
             this.modalProduct = product || null;
             this.productModalOpen = true;
         },
@@ -208,6 +215,7 @@ window.posOrder = function posOrder(initialLayout) {
             return Object.values(grouped);
         },
         add(name, sizeInfo) {
+            if (!this.ensureClockedIn()) return;
             if (!sizeInfo) return;
 
             const sizeLabel = (typeof sizeInfo.size === 'string' && sizeInfo.size.trim() !== '')
@@ -233,12 +241,14 @@ window.posOrder = function posOrder(initialLayout) {
             this.persistCart();
         },
         increment(productId, size) {
+            if (!this.ensureClockedIn()) return;
             const item = this.cart.find(i => i.product_id === productId && i.size === size);
             if (!item) return;
             item.quantity += 1;
             this.persistCart();
         },
         decrement(productId, size) {
+            if (!this.ensureClockedIn()) return;
             const item = this.cart.find(i => i.product_id === productId && i.size === size);
             if (!item) return;
             item.quantity -= 1;
@@ -248,6 +258,7 @@ window.posOrder = function posOrder(initialLayout) {
             this.persistCart();
         },
         clear() {
+            if (!this.ensureClockedIn()) return;
             this.cart = [];
             this.persistCart();
         },
@@ -267,6 +278,11 @@ window.posOrder = function posOrder(initialLayout) {
             this.__toastTimer = window.setTimeout(() => {
                 this.toastOpen = false;
             }, 2500);
+        },
+        ensureClockedIn() {
+            if (this.clockedIn) return true;
+            this.showToast('Staff is currently clocked out. You cannot add or checkout orders.');
+            return false;
         },
         showSuccess(message) {
             this.successMessage = message || '';
@@ -303,6 +319,7 @@ window.posOrder = function posOrder(initialLayout) {
             return diff > 0 ? diff : 0;
         },
         startCheckout() {
+            if (!this.ensureClockedIn()) return;
             this.checkoutError = '';
             if (this.cart.length === 0) return;
 
@@ -326,6 +343,7 @@ window.posOrder = function posOrder(initialLayout) {
             this.checkoutModal = true;
         },
         async confirmCheckout() {
+            if (!this.ensureClockedIn()) return;
             this.checkoutError = '';
             if (this.isSubmitting) return;
             if (this.cart.length === 0) {
@@ -589,7 +607,7 @@ Alpine.data('orderHistory', () => ({
 
             this.selectedOrder = data.order;
             this.orderTotals[this.selectedOrder.id] = Number(this.selectedOrder.total || 0);
-            this.orderStatuses[this.selectedOrder.id] = this.selectedOrder.status;
+            this.orderStatuses[this.selectedOrder.id] = this.selectedOrder.status_label || this.selectedOrder.status;
             this.cancelEdit();
         } catch (e) {
             this.errorMessage = 'Failed to update item.';
@@ -634,7 +652,7 @@ Alpine.data('orderHistory', () => ({
 
             this.selectedOrder = data.order;
             this.orderTotals[this.selectedOrder.id] = Number(this.selectedOrder.total || 0);
-            this.orderStatuses[this.selectedOrder.id] = this.selectedOrder.status;
+            this.orderStatuses[this.selectedOrder.id] = this.selectedOrder.status_label || this.selectedOrder.status;
             this.cancelEdit();
         } catch (e) {
             this.errorMessage = 'Failed to delete item.';

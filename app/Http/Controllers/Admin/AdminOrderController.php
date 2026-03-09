@@ -3,7 +3,10 @@
 namespace App\Http\Controllers\Admin;
 
 use App\Http\Controllers\Controller;
+use App\Models\MoneyInventory;
 use App\Models\Order;
+use App\Models\PaymentEntry;
+use App\Models\PaymentEntryItem;
 use App\Models\User;
 use Carbon\Carbon;
 use Illuminate\Pagination\LengthAwarePaginator;
@@ -245,12 +248,48 @@ class AdminOrderController extends Controller
             ->flatMap(fn (Order $o) => $o->items->whereNull('deleted_at'))
             ->sum('quantity');
 
+        $paidOrders = $orders->where('status', 'paid');
+        $cashSalesTotal = (float) $paidOrders
+            ->where('payment_type', 'cash')
+            ->sum(fn (Order $o) => (float) ($o->total_amount ?? $o->total ?? 0));
+        $gcashSalesTotal = (float) $paidOrders
+            ->where('payment_type', 'gcash')
+            ->sum(fn (Order $o) => (float) ($o->total_amount ?? $o->total ?? 0));
+        $paidSalesTotal = (float) $paidOrders
+            ->sum(fn (Order $o) => (float) ($o->total_amount ?? $o->total ?? 0));
+
         $dateDisplay = $date;
         try {
             $dateDisplay = Carbon::parse($date)->format('F j, Y (l)');
         } catch (\Throwable $e) {
             $dateDisplay = $date;
         }
+
+        $moneyInventoryRows = MoneyInventory::query()
+            ->where('user_id', $staff->id)
+            ->whereDate('date', $date)
+            ->orderByDesc('denomination')
+            ->get(['denomination', 'quantity']);
+
+        $moneyInventoryTotal = (int) $moneyInventoryRows
+            ->sum(fn (MoneyInventory $r) => ((int) $r->denomination) * ((int) $r->quantity));
+
+        $paymentEntries = PaymentEntry::query()
+            ->where('user_id', $staff->id)
+            ->whereDate('date', $date)
+            ->with(['items' => function ($q) {
+                $q->orderByDesc('denomination');
+            }])
+            ->latest()
+            ->get(['id', 'payment_type', 'received_amount', 'created_at']);
+
+        $cashPaymentsTotal = (int) $paymentEntries
+            ->where('payment_type', 'cash')
+            ->sum(fn (PaymentEntry $e) => (int) $e->received_amount);
+
+        $gcashPaymentsTotal = (int) $paymentEntries
+            ->where('payment_type', 'gcash')
+            ->sum(fn (PaymentEntry $e) => (int) $e->received_amount);
 
         return response()->json([
             'date' => $date,
@@ -263,6 +302,40 @@ class AdminOrderController extends Controller
                 'total_orders' => (int) $totalOrders,
                 'total_items' => (int) $totalItems,
                 'total_sales' => (float) $totalSales,
+                'paid_sales' => [
+                    'cash' => (float) $cashSalesTotal,
+                    'gcash' => (float) $gcashSalesTotal,
+                    'overall' => (float) $paidSalesTotal,
+                ],
+            ],
+            'money_inventory' => [
+                'total_cash' => (int) $moneyInventoryTotal,
+                'breakdown' => $moneyInventoryRows->map(fn (MoneyInventory $r) => [
+                    'denomination' => (int) $r->denomination,
+                    'quantity' => (int) $r->quantity,
+                    'subtotal' => (int) $r->denomination * (int) $r->quantity,
+                ])->values()->all(),
+            ],
+            'payment_inventory' => [
+                'totals' => [
+                    'cash' => (int) $cashPaymentsTotal,
+                    'gcash' => (int) $gcashPaymentsTotal,
+                    'overall' => (int) ($cashPaymentsTotal + $gcashPaymentsTotal),
+                ],
+                'entries' => $paymentEntries->map(function (PaymentEntry $e) {
+                    return [
+                        'id' => (int) $e->id,
+                        'payment_type' => (string) $e->payment_type,
+                        'received_amount' => (int) $e->received_amount,
+                        'created_at' => $this->formatHumanDateTime($e->created_at ? Carbon::instance($e->created_at) : null),
+                        'created_at_raw' => $e->created_at?->toIso8601String(),
+                        'items' => $e->items->map(fn (PaymentEntryItem $i) => [
+                            'denomination' => (int) $i->denomination,
+                            'quantity' => (int) $i->quantity,
+                            'subtotal' => (int) $i->denomination * (int) $i->quantity,
+                        ])->values()->all(),
+                    ];
+                })->values()->all(),
             ],
             'orders' => $orders->map(function (Order $o) {
                 $total = (float) ($o->total_amount ?? $o->total ?? 0);

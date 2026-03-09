@@ -4,6 +4,7 @@ namespace App\Models;
 
 // use Illuminate\Contracts\Auth\MustVerifyEmail;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
+use Illuminate\Database\Eloquent\Relations\HasMany;
 use Illuminate\Foundation\Auth\User as Authenticatable;
 use Illuminate\Notifications\Notifiable;
 
@@ -23,6 +24,7 @@ class User extends Authenticatable
         'password',
         'role',
         'pos_layout',
+        'clocked_in',
     ];
 
     /**
@@ -45,6 +47,7 @@ class User extends Authenticatable
         return [
             'email_verified_at' => 'datetime',
             'password' => 'hashed',
+            'clocked_in' => 'boolean',
         ];
     }
 
@@ -56,5 +59,15 @@ class User extends Authenticatable
     public function isStaff(): bool
     {
         return $this->role === 'staff';
+    }
+
+    public function moneyInventories(): HasMany
+    {
+        return $this->hasMany(MoneyInventory::class);
+    }
+
+    public function paymentEntries(): HasMany
+    {
+        return $this->hasMany(PaymentEntry::class);
     }
 }

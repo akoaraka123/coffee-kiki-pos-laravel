@@ -3,10 +3,12 @@
 use App\Http\Controllers\ProfileController;
 use App\Http\Controllers\AdminDashboardController;
 use App\Http\Controllers\StaffDashboardController;
+use App\Http\Controllers\StaffMoneyInventoryController;
 use App\Http\Controllers\Admin\AdminUserController;
 use App\Http\Controllers\Admin\AdminOrderController;
 use App\Http\Controllers\Admin\AdminProductController;
 use App\Http\Controllers\Admin\AdminCategoryController;
+use App\Http\Controllers\Admin\AdminMoneyInventoryController;
 use App\Http\Controllers\OrderController;
 use Illuminate\Support\Facades\Route;
 
@@ -57,6 +59,8 @@ Route::prefix('admin')
         Route::get('/users/{user}/edit', [AdminUserController::class, 'edit'])->name('users.edit');
         Route::put('/users/{user}', [AdminUserController::class, 'update'])->name('users.update');
         Route::delete('/users/{user}', [AdminUserController::class, 'destroy'])->name('users.destroy');
+
+        Route::get('/money-inventory', [AdminMoneyInventoryController::class, 'index'])->name('money-inventory.index');
     });
 
 Route::prefix('staff')
@@ -64,6 +68,10 @@ Route::prefix('staff')
     ->name('staff.')
     ->group(function () {
         Route::get('/dashboard', StaffDashboardController::class)->name('dashboard');
+
+        Route::get('/money-inventory', [StaffMoneyInventoryController::class, 'index'])->name('money-inventory.index');
+        Route::post('/money-inventory', [StaffMoneyInventoryController::class, 'save'])->name('money-inventory.save');
+        Route::post('/money-inventory/payment-entry', [StaffMoneyInventoryController::class, 'storePaymentEntry'])->name('money-inventory.payment-entries.store');
     });
 
 Route::middleware(['auth', 'verified', 'role:staff'])
@@ -87,5 +95,9 @@ Route::middleware('auth')->group(function () {
 Route::post('/profile/pos-layout', [ProfileController::class, 'updatePosLayout'])
     ->middleware(['auth', 'verified', 'role:staff'])
     ->name('profile.pos-layout');
+
+Route::post('/profile/clocked-in', [ProfileController::class, 'updateClockedIn'])
+    ->middleware(['auth', 'verified', 'role:staff'])
+    ->name('profile.clocked-in');
 
 require __DIR__.'/auth.php';

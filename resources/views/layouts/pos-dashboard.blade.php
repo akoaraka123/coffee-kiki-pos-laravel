@@ -44,13 +44,6 @@
                             <span class="inline-flex items-center rounded-full border border-white/10 bg-white/5 px-3 py-1 text-xs font-semibold text-white/80">
                                 {{ Auth::user()->role === 'admin' ? 'Admin' : 'Staff' }}
                             </span>
-
-                            <form method="POST" action="{{ route('logout') }}">
-                                @csrf
-                                <button type="submit" class="inline-flex items-center justify-center rounded-full bg-[#efe9df] px-4 py-2 text-sm font-semibold text-[#1c1c1c] shadow-lg hover:opacity-95 active:opacity-90">
-                                    Logout
-                                </button>
-                            </form>
                         </div>
                     </div>
                 </header>

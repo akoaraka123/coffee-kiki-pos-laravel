@@ -10,7 +10,15 @@
         data-update-item-url-template="{{ route('orders.items.update', ['order' => '__ORDER__', 'item' => '__ITEM__']) }}"
         data-delete-item-url-template="{{ route('orders.items.delete', ['order' => '__ORDER__', 'item' => '__ITEM__']) }}"
         data-order-totals='@json($orders->getCollection()->mapWithKeys(fn ($o) => [(int) $o->id => (float) ($o->total_amount ?? $o->total ?? 0)]))'
-        data-order-statuses='@json($orders->getCollection()->mapWithKeys(fn ($o) => [(int) $o->id => (string) $o->status]))'
+        data-order-statuses='@json($orders->getCollection()->mapWithKeys(function ($o) {
+            $status = (string) ($o->status ?? '');
+            $paymentType = (string) ($o->payment_type ?? '');
+            $label = $status;
+            if ($status === 'paid') {
+                $label = $paymentType === 'gcash' ? 'Pay in G-Cash' : 'Pay in Cash';
+            }
+            return [(int) $o->id => $label];
+        }))'
     >
         <div class="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
             <div>
@@ -111,7 +119,21 @@
                                 <td class="px-5 py-4 text-white/70">{{ $order->customer_name ?? '—' }}</td>
                                 <td class="px-5 py-4">₱<span x-text="formatPrice(orderTotals[{{ (int) $order->id }}] ?? {{ (float) ($order->total_amount ?? $order->total ?? 0) }})"></span></td>
                                 <td class="px-5 py-4">
-                                    <span class="inline-flex items-center rounded-full border border-white/10 bg-white/5 px-3 py-1 text-xs text-white/80">
+                                    @php
+                                        $status = (string) ($order->status ?? '');
+                                        $paymentType = (string) ($order->payment_type ?? '');
+                                        $badgeClasses = 'inline-flex items-center rounded-full border border-white/10 bg-white/5 px-3 py-1 text-xs text-white/80';
+
+                                        if ($status === 'paid') {
+                                            if ($paymentType === 'cash') {
+                                                $badgeClasses = 'inline-flex items-center rounded-full border border-emerald-500/30 bg-emerald-500/10 px-3 py-1 text-xs font-semibold text-emerald-200';
+                                            } elseif ($paymentType === 'gcash') {
+                                                $badgeClasses = 'inline-flex items-center rounded-full border border-sky-500/30 bg-sky-500/10 px-3 py-1 text-xs font-semibold text-sky-200';
+                                            }
+                                        }
+                                    @endphp
+
+                                    <span class="{{ $badgeClasses }}">
                                         <span x-text="orderStatuses[{{ (int) $order->id }}] ?? '{{ $order->status }}'"></span>
                                     </span>
                                 </td>

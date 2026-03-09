@@ -87,9 +87,9 @@
                                         <span class="font-medium" x-show="!(isDesktop && sidebarCollapsed)">Orders</span>
                                     </a>
 
-                                    <a href="{{ $isAdmin ? route('admin.products.index') : '#' }}" class="group flex items-center gap-3 rounded-xl px-4 py-3 text-sm {{ request()->routeIs('admin.products.*') ? 'bg-white/10 text-white' : 'text-white/70 hover:bg-white/5 hover:text-white' }}" :title="(isDesktop && sidebarCollapsed) ? 'Products' : ''">
-                                        <span class="grid h-9 w-9 place-items-center rounded-xl border border-white/10 bg-white/5 text-white/80 group-hover:bg-white/10">P</span>
-                                        <span class="font-medium" x-show="!(isDesktop && sidebarCollapsed)">Products</span>
+                                    <a href="{{ $isAdmin ? route('admin.products.index') : route('staff.money-inventory.index') }}" class="group flex items-center gap-3 rounded-xl px-4 py-3 text-sm {{ request()->routeIs('admin.products.*') || request()->routeIs('staff.money-inventory.*') ? 'bg-white/10 text-white' : 'text-white/70 hover:bg-white/5 hover:text-white' }}" :title="(isDesktop && sidebarCollapsed) ? ($isAdmin ? 'Products' : 'Money Inventory') : ''">
+                                        <span class="grid h-9 w-9 place-items-center rounded-xl border border-white/10 bg-white/5 text-white/80 group-hover:bg-white/10">{{ $isAdmin ? 'P' : 'M' }}</span>
+                                        <span class="font-medium" x-show="!(isDesktop && sidebarCollapsed)">{{ $isAdmin ? 'Products' : 'Money Inventory' }}</span>
                                     </a>
 
                                     <a href="#" class="group flex items-center gap-3 rounded-xl px-4 py-3 text-sm text-white/70 hover:bg-white/5 hover:text-white" :title="(isDesktop && sidebarCollapsed) ? 'Reports' : ''">
@@ -107,12 +107,14 @@
                             </div>
 
                             <div class="mt-auto p-6" x-show="!(isDesktop && sidebarCollapsed)">
-                                <form method="POST" action="{{ route('logout') }}">
-                                    @csrf
-                                    <button type="submit" class="flex w-full items-center justify-center gap-3 rounded-xl border border-white/10 bg-white/5 px-4 py-3 text-sm font-semibold text-white/80 shadow-sm hover:bg-white/10">
-                                        Logout
-                                    </button>
-                                </form>
+                                @if ($isAdmin || request()->routeIs('profile.edit'))
+                                    <form method="POST" action="{{ route('logout') }}">
+                                        @csrf
+                                        <button type="submit" class="flex w-full items-center justify-center gap-3 rounded-xl border border-white/10 bg-white/5 px-4 py-3 text-sm font-semibold text-white/80 shadow-sm hover:bg-white/10">
+                                            Logout
+                                        </button>
+                                    </form>
+                                @endif
                             </div>
                         </div>
                     </aside>

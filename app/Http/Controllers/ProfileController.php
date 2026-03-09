@@ -71,6 +71,32 @@ class ProfileController extends Controller
     }
 
     /**
+     * Update only the clocked_in status for the authenticated staff user.
+     */
+    public function updateClockedIn(Request $request): JsonResponse|RedirectResponse
+    {
+        $user = $request->user();
+
+        if (! $user || ! $user->isStaff() || ! Schema::hasColumn('users', 'clocked_in')) {
+            abort(403);
+        }
+
+        $clockedIn = (bool) $request->boolean('clocked_in');
+
+        $user->clocked_in = $clockedIn;
+        $user->save();
+
+        if ($request->wantsJson()) {
+            return response()->json([
+                'status' => 'ok',
+                'clocked_in' => $clockedIn,
+            ]);
+        }
+
+        return Redirect::route('profile.edit')->with('status', 'profile-clocked-in-updated');
+    }
+
+    /**
      * Delete the user's account.
      */
     public function destroy(Request $request): RedirectResponse

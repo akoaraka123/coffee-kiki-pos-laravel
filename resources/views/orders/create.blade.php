@@ -21,6 +21,7 @@
     x-data="posOrder('{{ auth()->user()->pos_layout === 'left' ? 'left' : 'right' }}')"
     data-products='@json($products)'
     data-initial-layout="{{ auth()->user()->pos_layout === 'left' ? 'left' : 'right' }}"
+    data-clocked-in="{{ auth()->user()->clocked_in ? '1' : '0' }}"
 @endsection
 
 @section('content')
@@ -148,8 +149,8 @@
 
             <div class="mt-4 border-t border-white/10 pt-5">
                 <div class="flex items-center justify-between">
-                    <div class="text-sm font-semibold text-white/70">Total:</div>
-                    <div class="text-xl font-bold">₱<span x-text="formatPrice(total())"></span></div>
+                    <div class="text-xs font-semibold uppercase tracking-wide text-white/50">Total</div>
+                    <div class="text-2xl font-bold tracking-wide text-white">₱<span x-text="formatPrice(total())"></span></div>
                 </div>
             </div>
 
@@ -177,7 +178,7 @@
                             type="button"
                             class="rounded-xl border px-4 py-3 text-sm font-semibold transition"
                             x-on:click="paymentType = 'cash'"
-                            x-bind:class="paymentType === 'cash' ? 'border-white/10 bg-white/10 text-white' : 'border-white/10 bg-white/5 text-white/70 hover:bg-white/10 hover:text-white'"
+                            x-bind:class="paymentType === 'cash' ? 'border-emerald-400/30 bg-emerald-500 text-white shadow-sm' : 'border-white/10 bg-[#111] text-white/80 hover:bg-white/5'"
                         >
                             Cash
                         </button>
@@ -185,7 +186,7 @@
                             type="button"
                             class="rounded-xl border px-4 py-3 text-sm font-semibold transition"
                             x-on:click="paymentType = 'gcash'"
-                            x-bind:class="paymentType === 'gcash' ? 'border-white/10 bg-white/10 text-white' : 'border-white/10 bg-white/5 text-white/70 hover:bg-white/10 hover:text-white'"
+                            x-bind:class="paymentType === 'gcash' ? 'border-sky-400/30 bg-sky-500 text-white shadow-sm' : 'border-white/10 bg-[#111] text-white/80 hover:bg-white/5'"
                         >
                             GCash
                         </button>
@@ -215,7 +216,7 @@
 
                 <button
                     type="button"
-                    class="w-full rounded-full bg-[#efe9df] px-4 py-3 text-sm font-semibold text-[#1c1c1c] shadow-lg hover:opacity-95 active:opacity-90"
+                    class="w-full rounded-full bg-orange-500 px-4 py-3 text-sm font-bold text-white shadow-lg hover:bg-orange-600 active:bg-orange-700"
                     x-bind:disabled="cart.length === 0 || isSubmitting"
                     x-bind:class="(cart.length === 0 || isSubmitting) ? 'opacity-50 cursor-not-allowed' : ''"
                     x-on:click="startCheckout()"
@@ -225,7 +226,7 @@
 
                 <button
                     type="button"
-                    class="w-full rounded-full border border-white/10 bg-white/5 px-4 py-3 text-sm font-semibold text-white/70 hover:bg-white/10"
+                    class="w-full rounded-full border border-white/10 bg-white/5 px-4 py-3 text-sm font-semibold text-red-400 hover:bg-white/10 hover:text-red-300"
                     x-on:click="clear()"
                     x-bind:disabled="cart.length === 0"
                 >
@@ -279,7 +280,7 @@
                     </button>
                     <button
                         type="button"
-                        class="inline-flex items-center justify-center rounded-xl bg-[#efe9df] px-4 py-2 text-sm font-semibold text-[#1c1c1c] shadow-sm hover:opacity-95"
+                        class="inline-flex items-center justify-center rounded-xl border border-rose-600/35 bg-rose-600/25 px-4 py-2 text-sm font-semibold text-rose-100 shadow-sm hover:bg-rose-600/30"
                         x-bind:disabled="isSubmitting"
                         x-bind:class="isSubmitting ? 'opacity-60 cursor-not-allowed' : ''"
                         x-on:click="confirmCheckout()"

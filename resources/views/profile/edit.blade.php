@@ -48,6 +48,35 @@
                     </div>
                 </div>
 
+                <div class="mt-2 rounded-xl border border-white/10 bg-black/40 px-4 py-3" id="clocked-in-section">
+                    <div class="flex items-center justify-between gap-4">
+                        <div>
+                            <div class="text-xs font-semibold text-white/80">Clock In / Clock Out</div>
+                            <div class="mt-0.5 text-[11px] text-white/50">When off, you cannot add or checkout orders in POS.</div>
+                        </div>
+
+                        <div class="flex items-center gap-3">
+                            @php
+                                $clockedIn = old('clocked_in', ($user->clocked_in ?? true) ? 1 : 0);
+                            @endphp
+                            <span class="text-[11px] text-white/60">Off</span>
+                            <label class="relative inline-flex cursor-pointer items-center">
+                                <input
+                                    id="clocked-in-toggle"
+                                    type="checkbox"
+                                    class="peer sr-only"
+                                    data-update-url="{{ route('profile.clocked-in') }}"
+                                    {{ (int) $clockedIn === 1 ? 'checked' : '' }}
+                                >
+                                <span class="flex h-7 w-12 items-center justify-start rounded-full border border-white/20 bg-black/40 px-0.5 transition-colors duration-150 peer-checked:bg-emerald-500 peer-checked:justify-end">
+                                    <span class="h-5 w-5 rounded-full bg-white shadow transition-transform duration-150"></span>
+                                </span>
+                            </label>
+                            <span class="text-[11px] text-white/80">On</span>
+                        </div>
+                    </div>
+                </div>
+
                 <div class="mt-2 rounded-xl border border-white/10 bg-black/40 px-4 py-3" id="pos-layout-section">
                     <div class="flex items-center justify-between gap-4">
                         <div>
@@ -187,6 +216,40 @@
                         'X-CSRF-TOKEN': token,
                     },
                     body: JSON.stringify({ pos_layout: desired }),
+                }).finally(function () {
+                    saving = false;
+                });
+            });
+        });
+    </script>
+
+    <script>
+        document.addEventListener('DOMContentLoaded', function () {
+            var toggle = document.getElementById('clocked-in-toggle');
+            if (!toggle) return;
+
+            var url = toggle.dataset.updateUrl || '';
+            var meta = document.querySelector('meta[name="csrf-token"]');
+            var token = meta ? meta.getAttribute('content') : null;
+            var saving = false;
+
+            toggle.addEventListener('change', function () {
+                if (!url || !token || saving) {
+                    return;
+                }
+
+                saving = true;
+                var desired = !!toggle.checked;
+
+                fetch(url, {
+                    method: 'POST',
+                    headers: {
+                        'Accept': 'application/json',
+                        'Content-Type': 'application/json',
+                        'X-Requested-With': 'XMLHttpRequest',
+                        'X-CSRF-TOKEN': token,
+                    },
+                    body: JSON.stringify({ clocked_in: desired }),
                 }).finally(function () {
                     saving = false;
                 });

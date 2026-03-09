@@ -165,6 +165,16 @@ class OrderController extends Controller
             abort(403);
         }
 
+        if ($user && method_exists($user, 'isStaff') && $user->isStaff() && ! $user->clocked_in) {
+            if ($request->expectsJson()) {
+                return response()->json([
+                    'message' => 'Staff is currently clocked out. You cannot add or checkout orders.',
+                ], 403);
+            }
+
+            abort(403, 'Staff is currently clocked out. You cannot add or checkout orders.');
+        }
+
         $validated = $request->validate([
             'customer_name' => ['nullable', 'string', 'max:255'],
             'status' => ['required', 'string', 'in:pending,paid,cancelled'],
@@ -542,6 +552,13 @@ class OrderController extends Controller
         $total = (float) ($order->total_amount ?? $order->total ?? 0);
         $change = $order->change_amount !== null ? (float) $order->change_amount : null;
 
+        $paymentType = (string) ($order->payment_type ?? '');
+        $status = (string) $order->status;
+        $statusLabel = $status;
+        if ($status === 'paid') {
+            $statusLabel = $paymentType === 'gcash' ? 'Pay in G-Cash' : 'Pay in Cash';
+        }
+
         return [
             'id' => (int) $order->id,
             'order_number' => (string) $order->order_number,
@@ -550,7 +567,8 @@ class OrderController extends Controller
             'staff_name' => $order->creator?->name,
             'customer_name' => $order->customer_name,
             'status' => (string) $order->status,
-            'payment_type' => (string) ($order->payment_type ?? ''),
+            'status_label' => $statusLabel,
+            'payment_type' => $paymentType,
             'cash_received' => $order->cash_received !== null ? (float) $order->cash_received : null,
             'change_amount' => $change,
             'change' => $change,
