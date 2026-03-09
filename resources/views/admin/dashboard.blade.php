@@ -54,28 +54,30 @@
                 </div>
 
                 <div class="mt-4 overflow-hidden rounded-xl border border-white/10">
-                    <table class="min-w-full text-left text-sm">
-                        <thead class="bg-white/5 text-white/70">
-                            <tr>
-                                <th class="px-4 py-3 font-medium">Name</th>
-                                <th class="px-4 py-3 font-medium">Email</th>
-                                <th class="px-4 py-3 font-medium">Role</th>
-                            </tr>
-                        </thead>
-                        <tbody class="divide-y divide-white/10">
-                            @foreach (\App\Models\User::query()->latest()->limit(5)->get(['name','email','role']) as $user)
+                    <div class="overflow-x-auto">
+                        <table class="min-w-full text-left text-sm">
+                            <thead class="bg-white/5 text-white/70">
                                 <tr>
-                                    <td class="px-4 py-3">{{ $user->name }}</td>
-                                    <td class="px-4 py-3 text-white/70">{{ $user->email }}</td>
-                                    <td class="px-4 py-3">
-                                        <span class="inline-flex items-center rounded-full border border-white/10 bg-white/5 px-3 py-1 text-xs text-white/80">
-                                            {{ $user->role }}
-                                        </span>
-                                    </td>
+                                    <th class="px-4 py-3 font-medium">Name</th>
+                                    <th class="px-4 py-3 font-medium">Email</th>
+                                    <th class="px-4 py-3 font-medium">Role</th>
                                 </tr>
-                            @endforeach
-                        </tbody>
-                    </table>
+                            </thead>
+                            <tbody class="divide-y divide-white/10">
+                                @foreach (\App\Models\User::query()->latest()->limit(5)->get(['name','email','role']) as $user)
+                                    <tr>
+                                        <td class="px-4 py-3">{{ $user->name }}</td>
+                                        <td class="px-4 py-3 text-white/70">{{ $user->email }}</td>
+                                        <td class="px-4 py-3">
+                                            <span class="inline-flex items-center rounded-full border border-white/10 bg-white/5 px-3 py-1 text-xs text-white/80">
+                                                {{ $user->role }}
+                                            </span>
+                                        </td>
+                                    </tr>
+                                @endforeach
+                            </tbody>
+                        </table>
+                    </div>
                 </div>
             </div>
 

@@ -84,4 +84,8 @@ Route::middleware('auth')->group(function () {
     Route::delete('/profile', [ProfileController::class, 'destroy'])->name('profile.destroy');
 });
 
+Route::post('/profile/pos-layout', [ProfileController::class, 'updatePosLayout'])
+    ->middleware(['auth', 'verified', 'role:staff'])
+    ->name('profile.pos-layout');
+
 require __DIR__.'/auth.php';

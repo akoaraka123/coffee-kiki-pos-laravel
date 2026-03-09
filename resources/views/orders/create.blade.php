@@ -18,15 +18,23 @@
 @endsection
 
 @section('x-data')
-    x-data="posOrder()" data-products='@json($products)'
+    x-data="posOrder('{{ auth()->user()->pos_layout === 'left' ? 'left' : 'right' }}')"
+    data-products='@json($products)'
+    data-initial-layout="{{ auth()->user()->pos_layout === 'left' ? 'left' : 'right' }}"
 @endsection
 
 @section('content')
-    <div class="grid grid-cols-1 gap-6 xl:grid-cols-[1fr_360px] h-[calc(100vh-120px)] overflow-hidden">
+    <div
+        class="grid grid-cols-1 gap-6 h-[calc(100vh-120px)] overflow-hidden"
+        :class="({ left: 'lg:grid-cols-[minmax(0,1fr)_minmax(0,1.4fr)]', right: 'lg:grid-cols-[minmax(0,1.6fr)_minmax(0,1fr)]' })[layoutPosition] || 'lg:grid-cols-[minmax(0,1.6fr)_minmax(0,1fr)]'"
+    >
         <script>
             window.__assetBaseUrl = @js(rtrim(asset(''), '/') . '/');
         </script>
-        <div class="space-y-4 overflow-y-auto pr-2 min-h-0">
+        <div
+            class="space-y-4 overflow-y-auto pr-2 min-h-0"
+            :class="layoutPosition === 'left' ? 'lg:order-2' : 'lg:order-1'"
+        >
             <div class="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
                 <div>
                     <div class="text-sm font-semibold">Menu</div>
@@ -78,15 +86,22 @@
                         </div>
 
                         <div class="mt-3 space-y-2">
-                            <template x-for="size in product.sizes" :key="size.size">
+                            <template
+                                x-if="Array.isArray(product.sizes) && product.sizes.length > 0"
+                            >
+                                <template
+                                    x-for="(size, idx) in product.sizes"
+                                    :key="String(size.id || '') + '-' + idx"
+                                >
                                 <button
                                     type="button"
                                     class="w-full flex items-center justify-between px-4 py-3 rounded-xl bg-black/40 border border-white/10 hover:bg-black/60 transition text-white text-lg font-medium"
                                     x-on:click.stop="add(product.name, size)"
                                 >
-                                    <span x-text="size.size"></span>
+                                    <span x-text="size.size || 'Regular'"></span>
                                     <span>₱<span x-text="formatPrice(size.price)"></span></span>
                                 </button>
+                                </template>
                             </template>
                         </div>
                     </div>
@@ -94,7 +109,10 @@
             </div>
         </div>
 
-        <div class="sticky top-6 self-start h-[calc(100vh-160px)]">
+        <div
+            class="sticky top-6 self-start h-[calc(100vh-160px)]"
+            :class="layoutPosition === 'left' ? 'lg:order-1' : 'lg:order-2'"
+        >
             <div class="rounded-xl border border-white/10 bg-white/5 p-5 shadow-sm flex flex-col h-full min-h-0">
             <div class="text-sm font-semibold">Current Order</div>
 
@@ -321,7 +339,10 @@
 
                     <template x-if="modalProduct && Array.isArray(modalProduct.sizes) && modalProduct.sizes.length > 0">
                         <div class="space-y-2">
-                            <template x-for="size in modalProduct.sizes" :key="size.size">
+                            <template
+                                x-for="(size, idx) in modalProduct.sizes"
+                                :key="String(size.id || '') + '-' + idx"
+                            >
                                 <button
                                     type="button"
                                     class="w-full flex items-center justify-between px-4 py-3 rounded-xl bg-black/40 border border-white/10 hover:bg-black/60 transition text-white text-lg font-medium"

@@ -4,16 +4,17 @@ import Alpine from 'alpinejs';
 
 window.Alpine = Alpine;
 
-window.posOrder = function posOrder(products) {
+window.posOrder = function posOrder(initialLayout) {
     return {
-        isDesktop: window.innerWidth >= 1024,
-        sidebarOpen: window.innerWidth >= 1024,
+        isDesktop: window.innerWidth >= 768,
+        sidebarOpen: window.innerWidth >= 768,
         sidebarCollapsed: false,
         hoverOpened: false,
+        layoutPosition: (initialLayout === 'left') ? 'left' : 'right',
         activeTab: 'milk_tea',
         searchQuery: '',
         focusedProductName: '',
-        products: Array.isArray(products) ? products : [],
+        products: [],
         cart: [],
         paymentType: 'cash',
         cashReceived: '',
@@ -75,7 +76,7 @@ window.posOrder = function posOrder(products) {
             }
 
             window.addEventListener('resize', () => {
-                this.isDesktop = window.innerWidth >= 1024;
+                this.isDesktop = window.innerWidth >= 768;
                 if (this.isDesktop) {
                     this.sidebarOpen = true;
                 } else {
@@ -94,6 +95,11 @@ window.posOrder = function posOrder(products) {
                 }
             } catch (e) {
                 // ignore
+            }
+
+            const fromAttr = this.$el?.dataset?.initialLayout;
+            if (typeof fromAttr === 'string' && fromAttr.length > 0) {
+                this.layoutPosition = fromAttr === 'left' ? 'left' : 'right';
             }
 
             this.$watch('searchQuery', (value) => {
@@ -155,7 +161,8 @@ window.posOrder = function posOrder(products) {
         },
         groupedProducts() {
             const q = (this.searchQuery || '').trim().toLowerCase();
-            const filtered = this.products.filter(p => {
+            const filtered = (this.products || []).filter(p => {
+                if (!p) return false;
                 if (this.normalizeCategory(p.category) !== this.activeTab) return false;
                 if (!q) return true;
                 return String(p.name || '').toLowerCase().includes(q);
@@ -163,26 +170,53 @@ window.posOrder = function posOrder(products) {
             const grouped = {};
 
             filtered.forEach(product => {
-                const key = product.name;
+                if (!product) return;
+
+                const rawName = String(product.name || '').trim();
+                if (!rawName) return;
+
+                const price = Number(product.price);
+                if (!Number.isFinite(price)) return;
+
+                const key = rawName;
                 if (!grouped[key]) {
                     grouped[key] = {
-                        name: product.name,
+                        name: rawName,
                         image: product.image,
                         category: this.normalizeCategory(product.category),
                         sizes: [],
                     };
                 }
-                grouped[key].sizes.push({
-                    id: product.id,
-                    size: product.size || 'Regular',
-                    price: Number(product.price),
-                });
+
+                const sizeLabel = (typeof product.size === 'string' && product.size.trim() !== '')
+                    ? product.size.trim()
+                    : 'Regular';
+
+                const alreadyExists = grouped[key].sizes.some(s =>
+                    s.size === sizeLabel && Number(s.price) === price
+                );
+
+                if (!alreadyExists) {
+                    grouped[key].sizes.push({
+                        id: product.id,
+                        size: sizeLabel,
+                        price,
+                    });
+                }
             });
 
             return Object.values(grouped);
         },
         add(name, sizeInfo) {
-            const existing = this.cart.find(i => i.name === name && i.size === sizeInfo.size);
+            if (!sizeInfo) return;
+
+            const sizeLabel = (typeof sizeInfo.size === 'string' && sizeInfo.size.trim() !== '')
+                ? sizeInfo.size.trim()
+                : 'Regular';
+            const price = Number(sizeInfo.price);
+            if (!Number.isFinite(price)) return;
+
+            const existing = this.cart.find(i => i.name === name && i.size === sizeLabel);
             if (existing) {
                 existing.quantity += 1;
                 this.persistCart();
@@ -191,9 +225,9 @@ window.posOrder = function posOrder(products) {
 
             this.cart.push({
                 product_id: sizeInfo.id,
-                name: name,
-                size: sizeInfo.size,
-                price: Number(sizeInfo.price),
+                name,
+                size: sizeLabel,
+                price,
                 quantity: 1,
             });
             this.persistCart();

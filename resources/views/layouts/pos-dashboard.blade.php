@@ -55,14 +55,32 @@
                     </div>
                 </header>
 
-                <div class="relative w-full flex-1">
+                {{-- Small-screen notice (phones) --}}
+                <div class="flex-1 px-4 py-6 sm:px-6 md:hidden">
+                    <div class="flex h-full items-center justify-center">
+                        <div class="max-w-md rounded-2xl border border-white/10 bg-black/40 px-6 py-5 text-center">
+                            <div class="text-lg font-semibold">POS is designed for tablet devices.</div>
+                            <div class="mt-2 text-sm text-white/60">
+                                Please use a tablet-sized screen (at least 768px wide) to access the POS interface.
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="relative w-full flex-1 hidden md:block">
                     <template x-if="sidebarOpen && !isDesktop">
                         <div class="fixed inset-0 z-20 bg-black/60 lg:hidden" x-transition.opacity x-on:click="sidebarOpen = false"></div>
                     </template>
 
                     <aside
-                        class="fixed bottom-0 left-0 top-20 z-30 w-72 shrink-0 border-r border-white/10 bg-gradient-to-b from-[#1b1b1b] to-[#111] transform transition-transform duration-200 ease-in-out lg:translate-x-0 lg:transition-[width] lg:duration-200 lg:ease-in-out"
-                        :class="(sidebarOpen || isDesktop) ? 'translate-x-0' : '-translate-x-full'"
+                        class="fixed bottom-0 top-20 z-30 w-72 shrink-0 bg-gradient-to-b from-[#1b1b1b] to-[#111] transform transition-transform duration-200 ease-in-out lg:translate-x-0 lg:transition-[width] lg:duration-200 lg:ease-in-out"
+                        :class="{
+                            'left-0 border-r border-white/10': layoutPosition === 'right',
+                            'right-0 border-l border-white/10': layoutPosition === 'left',
+                            'translate-x-0': (sidebarOpen || isDesktop),
+                            '-translate-x-full': !(sidebarOpen || isDesktop) && layoutPosition === 'right',
+                            'translate-x-full': !(sidebarOpen || isDesktop) && layoutPosition === 'left',
+                        }"
                         :style="isDesktop ? (sidebarCollapsed ? 'width: 72px;' : 'width: 240px;') : ''"
                         x-on:mouseenter="if (isDesktop && sidebarCollapsed) { sidebarCollapsed = false; hoverOpened = true }"
                         x-on:mouseleave="if (isDesktop && hoverOpened) { sidebarCollapsed = true; hoverOpened = false }"
@@ -74,17 +92,28 @@
                                 </div>
                             </div>
 
-                            <div class="mt-auto p-6" x-show="!(isDesktop && sidebarCollapsed)">
+                            <div class="mt-auto space-y-3 p-6" x-show="!(isDesktop && sidebarCollapsed)">
                                 <a href="{{ route('orders.index') }}" class="flex w-full items-center justify-center gap-3 rounded-xl border border-white/10 bg-white/5 px-4 py-3 text-sm font-semibold text-white/80 shadow-sm hover:bg-white/10">
                                     Order History
                                 </a>
+
+                                @if (auth()->check() && auth()->user()->isStaff())
+                                    <a href="{{ route('profile.edit') }}" class="flex w-full items-center justify-center gap-3 rounded-xl border border-white/10 bg-black/40 px-4 py-3 text-sm font-semibold text-white/80 shadow-sm hover:bg-white/10">
+                                        <span class="grid h-8 w-8 place-items-center rounded-lg border border-white/10 bg-white/5 text-xs uppercase tracking-wider">⚙</span>
+                                        <span>Settings</span>
+                                    </a>
+                                @endif
                             </div>
                         </div>
                     </aside>
 
                     <main
-                        class="w-full px-4 py-6 transition-[padding-left] duration-200 ease-in-out sm:px-6"
-                        :style="isDesktop ? (sidebarCollapsed ? 'padding-left: 72px;' : 'padding-left: 240px;') : ''"
+                        class="w-full px-4 py-6 transition-[padding-left,padding-right] duration-200 ease-in-out sm:px-6"
+                        :style="isDesktop
+                            ? (layoutPosition === 'right'
+                                ? (sidebarCollapsed ? 'padding-left: 72px;' : 'padding-left: 240px;')
+                                : (sidebarCollapsed ? 'padding-right: 72px;' : 'padding-right: 240px;'))
+                            : ''"
                     >
                         <div class="mx-auto w-full max-w-[1400px]">
                             @if ($errors->any())

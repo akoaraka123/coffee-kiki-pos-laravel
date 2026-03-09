@@ -10,8 +10,8 @@
                 <p class="mt-1 text-sm text-white/50">Read-only order history for monitoring and reports.</p>
             </div>
 
-            <form method="GET" action="{{ route('admin.orders.index') }}" class="flex items-center gap-3">
-                <select name="staff" class="w-56 rounded-xl border border-white/10 bg-white/5 px-4 py-2 text-sm text-white/80 focus:outline-none focus:ring-2 focus:ring-white/20">
+            <form method="GET" action="{{ route('admin.orders.index') }}" class="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-end">
+                <select name="staff" class="w-full sm:w-56 rounded-xl border border-white/10 bg-white/5 px-4 py-2 text-sm text-white/80 focus:outline-none focus:ring-2 focus:ring-white/20">
                     <option value="" {{ empty($staffId) ? 'selected' : '' }}>All staff</option>
                     @foreach ($staffUsers as $staff)
                         <option value="{{ $staff->id }}" {{ (string) $staffId === (string) $staff->id ? 'selected' : '' }}>{{ $staff->name }}</option>
