@@ -161,6 +161,7 @@
                 <input type="hidden" name="payment_type" x-bind:value="paymentType" />
                 <input type="hidden" name="total_amount" x-bind:value="formatPrice(total())" />
                 <input type="hidden" name="cash_received" x-bind:value="paymentType === 'cash' ? cashReceived : ''" />
+                <input type="hidden" name="gcash_reference" x-bind:value="paymentType === 'gcash' ? gcashReference : ''" />
 
                 <input
                     type="text"
@@ -193,26 +194,40 @@
                     </div>
                 </div>
 
-                <div class="space-y-2" x-show="paymentType === 'cash'" x-cloak>
-                    <label class="text-xs font-semibold text-white/60">Cash Received</label>
-                    <input
-                        type="number"
-                        inputmode="decimal"
-                        step="0.01"
-                        min="0"
-                        placeholder="Enter cash amount"
-                        class="w-full rounded-xl border border-white/10 bg-[#111] px-4 py-3 text-sm text-white placeholder:text-white/30 focus:outline-none focus:ring-2 focus:ring-white/20"
-                        x-model="cashReceived"
-                    />
+                <template x-if="paymentType === 'cash'">
+                    <div class="space-y-2" x-cloak>
+                        <label class="text-xs font-semibold text-white/60">Cash Received</label>
+                        <input
+                            type="number"
+                            inputmode="decimal"
+                            step="0.01"
+                            min="0"
+                            placeholder="Enter cash amount"
+                            class="w-full rounded-xl border border-white/10 bg-[#111] px-4 py-3 text-sm text-white placeholder:text-white/30 focus:outline-none focus:ring-2 focus:ring-white/20"
+                            x-model="cashReceived"
+                        />
 
-                    <div class="rounded-xl border border-white/10 bg-white/5 px-4 py-3 text-sm" x-show="cashReceived !== ''">
-                        <div class="flex items-center justify-between text-white/70">
-                            <span>Change</span>
-                            <span class="font-semibold text-white">₱<span x-text="formatPrice(changeAmount())"></span></span>
+                        <div class="rounded-xl border border-white/10 bg-white/5 px-4 py-3 text-sm" x-show="cashReceived !== ''">
+                            <div class="flex items-center justify-between text-white/70">
+                                <span>Change</span>
+                                <span class="font-semibold text-white">₱<span x-text="formatPrice(changeAmount())"></span></span>
+                            </div>
+                            <div class="mt-1 text-xs text-white/40" x-show="Number(cashReceived || 0) < Number(total() || 0)">Insufficient payment amount.</div>
                         </div>
-                        <div class="mt-1 text-xs text-white/40" x-show="Number(cashReceived || 0) < Number(total() || 0)">Insufficient payment amount.</div>
                     </div>
-                </div>
+                </template>
+
+                <template x-if="paymentType === 'gcash'">
+                    <div class="space-y-2" x-cloak>
+                        <label class="text-xs font-semibold text-white/60">GCash Reference No. (optional)</label>
+                        <input
+                            type="text"
+                            placeholder="Enter GCash reference number"
+                            class="w-full rounded-xl border border-white/10 bg-[#111] px-4 py-3 text-sm text-white placeholder:text-white/30 focus:outline-none focus:ring-2 focus:ring-white/20"
+                            x-model="gcashReference"
+                        />
+                    </div>
+                </template>
 
                 <button
                     type="button"

@@ -72,6 +72,9 @@ Route::prefix('staff')
         Route::get('/money-inventory', [StaffMoneyInventoryController::class, 'index'])->name('money-inventory.index');
         Route::post('/money-inventory', [StaffMoneyInventoryController::class, 'save'])->name('money-inventory.save');
         Route::post('/money-inventory/payment-entry', [StaffMoneyInventoryController::class, 'storePaymentEntry'])->name('money-inventory.payment-entries.store');
+        Route::put('/money-inventory/payment-entry/{entry}', [StaffMoneyInventoryController::class, 'updatePaymentEntry'])->name('money-inventory.payment-entries.update');
+        Route::delete('/money-inventory/payment-entry/{entry}', [StaffMoneyInventoryController::class, 'deletePaymentEntry'])->name('money-inventory.payment-entries.destroy');
+        Route::post('/money-inventory/reset-todays-sales', [StaffMoneyInventoryController::class, 'resetTodaysSales'])->name('money-inventory.reset-todays-sales');
     });
 
 Route::middleware(['auth', 'verified', 'role:staff'])

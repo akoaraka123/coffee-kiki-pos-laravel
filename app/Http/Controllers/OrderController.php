@@ -181,6 +181,7 @@ class OrderController extends Controller
             'items' => ['required', 'string'],
             'payment_type' => ['required', 'string', 'in:cash,gcash'],
             'cash_received' => ['nullable', 'numeric', 'min:0'],
+            'gcash_reference' => ['nullable', 'string', 'max:255'],
             'total_amount' => ['required', 'numeric', 'min:0'],
         ]);
 

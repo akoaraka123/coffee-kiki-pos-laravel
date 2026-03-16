@@ -24,6 +24,9 @@
                 ])->values()->all(),
             ])->values()->all()),
             paymentSaveUrl: @js(route('staff.money-inventory.payment-entries.store')),
+            paymentUpdateUrlTemplate: @js(route('staff.money-inventory.payment-entries.update', ['entry' => '__ENTRY__'])),
+            paymentDeleteUrlTemplate: @js(route('staff.money-inventory.payment-entries.destroy', ['entry' => '__ENTRY__'])),
+            resetTodaysSalesUrl: @js(route('staff.money-inventory.reset-todays-sales')),
         })"
         x-init="init()"
     >
@@ -53,20 +56,10 @@
             </div>
         </div>
 
-        <div class="grid grid-cols-1 gap-4 lg:grid-cols-2">
-            <div class="rounded-xl border border-white/10 bg-white/5 p-5 shadow-sm">
-                <div class="text-sm font-semibold">Total Cash</div>
-                <div class="mt-2 text-3xl font-semibold" x-text="formatCurrency(total())"></div>
-                <div class="mt-1 text-xs text-white/50">Automatically calculated from denominations × quantity.</div>
-            </div>
-
-            <div class="rounded-xl border border-white/10 bg-white/5 p-5 shadow-sm">
-                <div class="text-sm font-semibold">Notes</div>
-                <div class="mt-1 text-xs text-white/50">This inventory is saved per day and per staff account.</div>
-                <div class="mt-4 rounded-xl border border-white/10 bg-[#111]/40 p-4 text-sm text-white/70">
-                    Date: <span class="font-semibold text-white" x-text="date"></span>
-                </div>
-            </div>
+        <div x-show="!clockedIn" x-cloak class="rounded-2xl border border-white/10 bg-gradient-to-r from-emerald-600/25 via-white/5 to-sky-600/20 p-6 shadow-sm">
+            <div class="text-sm font-semibold text-white/80">Today's Total Sales</div>
+            <div class="mt-2 text-5xl font-extrabold tracking-tight text-white" x-text="formatCurrency(todaysTotalSales)"></div>
+            <div class="mt-2 text-xs text-white/50">Automatically calculated from paid orders created today.</div>
         </div>
 
         <template x-if="toastOpen">
@@ -136,6 +129,18 @@
                     <div class="mt-4 rounded-xl border border-white/10 bg-[#111]/50 p-4">
                         <div class="text-xs text-white/50">Total Received</div>
                         <div class="mt-1 text-3xl font-semibold" x-text="formatCurrency(paymentTotal())"></div>
+                        <div
+                            class="mt-3 rounded-xl border px-4 py-3 text-sm"
+                            x-bind:class="paymentTotal() === Math.floor(todaysTotalSales || 0)
+                                ? 'border-emerald-500/30 bg-emerald-500/10 text-emerald-200'
+                                : 'border-rose-500/30 bg-rose-500/10 text-rose-200'"
+                        >
+                            <div class="flex items-center justify-between">
+                                <span class="font-semibold">Today's Total Sales</span>
+                                <span class="font-semibold" x-text="formatCurrency(todaysTotalSales)"></span>
+                            </div>
+                            <div class="mt-1 text-xs" x-text="paymentTotal() === Math.floor(todaysTotalSales || 0) ? 'Matched' : 'Not matched'"> </div>
+                        </div>
                         <template x-if="paymentType === 'gcash'">
                             <div class="mt-4">
                                 <label class="text-xs text-white/50">Optional: direct amount input (GCash)</label>
@@ -182,8 +187,28 @@
                     <template x-for="entry in paymentEntries" :key="entry.id">
                         <div class="rounded-xl border border-white/10 bg-[#111]/40 p-4">
                             <div class="flex items-center justify-between gap-3">
-                                <div class="text-sm font-semibold" x-text="entry.payment_type === 'gcash' ? 'GCash' : 'Cash'"></div>
-                                <div class="text-lg font-semibold" x-text="formatCurrency(entry.received_amount)"></div>
+                                <div>
+                                    <div class="text-sm font-semibold" x-text="entry.payment_type === 'gcash' ? 'GCash' : 'Cash'"></div>
+                                    <div class="mt-0.5 text-xs text-white/50" x-text="formatEntryTime(entry.created_at)"></div>
+                                </div>
+
+                                <div class="flex items-center gap-2">
+                                    <div class="mr-2 text-lg font-semibold" x-text="formatCurrency(entry.received_amount)"></div>
+                                    <button
+                                        type="button"
+                                        class="inline-flex items-center justify-center rounded-lg bg-sky-600 px-3 py-2 text-xs font-semibold text-white hover:bg-sky-500"
+                                        x-on:click="openEditEntry(entry)"
+                                    >
+                                        Edit
+                                    </button>
+                                    <button
+                                        type="button"
+                                        class="inline-flex items-center justify-center rounded-lg bg-rose-600 px-3 py-2 text-xs font-semibold text-white hover:bg-rose-500"
+                                        x-on:click="deleteEntry(entry)"
+                                    >
+                                        Delete
+                                    </button>
+                                </div>
                             </div>
                             <div class="mt-3 grid grid-cols-2 gap-2 sm:grid-cols-4">
                                 <template x-for="it in (entry.items || [])" :key="entry.id + '-' + it.denomination">
@@ -198,6 +223,89 @@
                 </div>
             </div>
         </div>
+        <template x-if="editEntryOpen">
+            <div class="fixed inset-0 z-50" x-on:keydown.escape.window="closeEditEntry()">
+                <div class="absolute inset-0 bg-black/70" x-transition.opacity x-on:click="closeEditEntry()"></div>
+                <div class="absolute inset-0 grid place-items-center px-4">
+                    <div class="w-full max-w-md rounded-2xl border border-white/10 bg-[#111] p-6 shadow-2xl" x-transition x-on:click.stop>
+                        <div class="text-lg font-semibold">Edit Payment Entry</div>
+                        <div class="mt-1 text-sm text-white/60">Update the received amount.</div>
+
+                        <div class="mt-5 rounded-xl border border-white/10 bg-[#111]/40 p-4">
+                            <div class="text-xs text-white/50">Total</div>
+                            <div class="mt-1 text-3xl font-semibold" x-text="formatCurrency(editPaymentTotal())"></div>
+                            <div
+                                class="mt-3 rounded-xl border px-3 py-2 text-sm"
+                                x-bind:class="editPaymentTotal() === Math.floor(todaysTotalSales || 0)
+                                    ? 'border-emerald-500/30 bg-emerald-500/10 text-emerald-200'
+                                    : 'border-rose-500/30 bg-rose-500/10 text-rose-200'"
+                            >
+                                <div class="flex items-center justify-between">
+                                    <span class="font-semibold">Today's Total Sales</span>
+                                    <span class="font-semibold" x-text="formatCurrency(todaysTotalSales)"></span>
+                                </div>
+                                <div class="mt-1 text-xs" x-text="editPaymentTotal() === Math.floor(todaysTotalSales || 0) ? 'Matched' : 'Not matched'"> </div>
+                            </div>
+                        </div>
+
+                        <div class="mt-4 space-y-2">
+                            <div class="text-xs font-semibold text-white/60">Denominations</div>
+                            <div class="space-y-2">
+                                <template x-for="d in paymentDenominations" :key="'edit-denom-' + d">
+                                    <div class="flex items-center justify-between gap-3 rounded-xl border border-white/10 bg-[#111]/40 px-3 py-2">
+                                        <div class="text-sm font-semibold" x-text="formatDenomination(d)"></div>
+                                        <div class="flex items-center gap-2">
+                                            <button
+                                                type="button"
+                                                class="grid h-9 w-9 place-items-center rounded-xl border border-white/10 bg-white/5 text-white/80 hover:bg-white/10"
+                                                x-on:click="editDecrement(d)"
+                                            >
+                                                -
+                                            </button>
+                                            <input
+                                                type="number"
+                                                min="0"
+                                                step="1"
+                                                inputmode="numeric"
+                                                class="h-9 w-20 rounded-xl border border-white/10 bg-[#111]/60 px-3 text-center text-sm font-semibold text-white"
+                                                x-bind:value="editQty(d)"
+                                                x-on:input="setEditQty(d, $event.target.value)"
+                                            />
+                                            <button
+                                                type="button"
+                                                class="grid h-9 w-9 place-items-center rounded-xl border border-white/10 bg-white/5 text-white/80 hover:bg-white/10"
+                                                x-on:click="editIncrement(d)"
+                                            >
+                                                +
+                                            </button>
+                                        </div>
+                                    </div>
+                                </template>
+                            </div>
+                        </div>
+
+                        <div class="mt-6 flex items-center justify-end gap-3">
+                            <button
+                                type="button"
+                                class="inline-flex items-center justify-center rounded-xl border border-white/10 bg-white/5 px-4 py-2 text-sm font-semibold text-white/80 hover:bg-white/10"
+                                x-on:click="closeEditEntry()"
+                            >
+                                Cancel
+                            </button>
+                            <button
+                                type="button"
+                                class="inline-flex items-center justify-center rounded-xl bg-sky-600 px-4 py-2 text-sm font-semibold text-white hover:bg-sky-500 disabled:opacity-60"
+                                x-bind:disabled="editSaving"
+                                x-on:click="saveEditEntry()"
+                            >
+                                <span x-show="!editSaving">Save</span>
+                                <span x-show="editSaving" x-cloak>Saving...</span>
+                            </button>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </template>
     </div>
 
     <script>
@@ -218,6 +326,9 @@
 
                 paymentDenominations: Array.isArray(payload?.paymentDenominations) ? payload.paymentDenominations : [],
                 paymentSaveUrl: payload?.paymentSaveUrl || '',
+                paymentUpdateUrlTemplate: payload?.paymentUpdateUrlTemplate || '',
+                paymentDeleteUrlTemplate: payload?.paymentDeleteUrlTemplate || '',
+                resetTodaysSalesUrl: payload?.resetTodaysSalesUrl || '',
                 paymentType: 'cash',
                 paymentBreakdown: {},
                 initialPaymentBreakdown: {},
@@ -225,7 +336,14 @@
                 paymentSaving: false,
                 gcashAmount: '',
 
+                editEntryOpen: false,
+                editEntry: null,
+                editPaymentBreakdown: {},
+                editSaving: false,
+
                 init() {
+                    console.log('MoneyInventory init payload:', payload);
+                    console.log('todaysTotalSales from backend:', payload?.todaysTotalSales);
                     this.initialQuantities = JSON.parse(JSON.stringify(this.quantities || {}));
                     this.denominations = (this.denominations || []).map(d => Number(d)).filter(d => Number.isFinite(d));
                     this.denominations.sort((a, b) => b - a);
@@ -288,6 +406,205 @@
                 formatCurrency(value) {
                     const n = Number(value || 0);
                     return `₱${n.toLocaleString(undefined, { minimumFractionDigits: 0, maximumFractionDigits: 0 })}`;
+                },
+
+                formatEntryTime(iso) {
+                    const raw = String(iso || '').trim();
+                    if (!raw) return '';
+                    const d = new Date(raw);
+                    if (Number.isNaN(d.getTime())) return '';
+                    return d.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+                },
+
+                buildEntryUrl(template, entryId) {
+                    if (!template) return '';
+                    return String(template).replace('__ENTRY__', encodeURIComponent(String(entryId)));
+                },
+
+                openEditEntry(entry) {
+                    this.errorMessage = '';
+                    this.editEntry = entry || null;
+                    const base = (this.paymentDenominations || []).reduce((acc, d) => {
+                        acc[String(d)] = 0;
+                        return acc;
+                    }, {});
+
+                    const items = Array.isArray(entry?.items) ? entry.items : [];
+                    items.forEach(it => {
+                        const denom = Number(it?.denomination);
+                        const qty = Number(it?.quantity);
+                        if (!Number.isFinite(denom) || !Number.isFinite(qty)) return;
+                        base[String(denom)] = qty > 0 ? Math.floor(qty) : 0;
+                    });
+
+                    this.editPaymentBreakdown = base;
+                    this.editEntryOpen = true;
+                    this.showToast(`Today's Total Sales: ${this.formatCurrency(this.todaysTotalSales)}`);
+                },
+
+                closeEditEntry() {
+                    this.editEntryOpen = false;
+                    this.editEntry = null;
+                    this.editPaymentBreakdown = {};
+                    this.editSaving = false;
+                },
+
+                editQty(d) {
+                    const key = String(d);
+                    const v = this.editPaymentBreakdown?.[key] ?? 0;
+                    const n = Number(v);
+                    return Number.isFinite(n) && n > 0 ? Math.floor(n) : 0;
+                },
+
+                setEditQty(d, value) {
+                    const key = String(d);
+                    const n = Number(value);
+                    const qty = Number.isFinite(n) && n > 0 ? Math.floor(n) : 0;
+                    this.editPaymentBreakdown = { ...(this.editPaymentBreakdown || {}), [key]: qty };
+                },
+
+                editIncrement(d) {
+                    const q = this.editQty(d);
+                    this.setEditQty(d, q + 1);
+                },
+
+                editDecrement(d) {
+                    const q = this.editQty(d);
+                    this.setEditQty(d, q - 1);
+                },
+
+                editPaymentTotal() {
+                    return (this.paymentDenominations || []).reduce((sum, d) => sum + (Number(d) * this.editQty(d)), 0);
+                },
+
+                async saveEditEntry() {
+                    this.errorMessage = '';
+                    if (!this.editEntry || !this.paymentUpdateUrlTemplate) {
+                        this.errorMessage = 'Edit endpoint not configured.';
+                        return;
+                    }
+                    if (this.editSaving) return;
+
+                    const token = document.querySelector('meta[name="csrf-token"]')?.getAttribute('content') || null;
+                    if (!token) {
+                        this.errorMessage = 'Security token not found. Please refresh the page and try again.';
+                        return;
+                    }
+
+                    const breakdownTotal = this.editPaymentTotal();
+                    if (!Number.isFinite(breakdownTotal) || breakdownTotal <= 0) {
+                        this.errorMessage = 'Please enter or build a received amount.';
+                        return;
+                    }
+
+                    this.editSaving = true;
+                    try {
+                        const url = this.buildEntryUrl(this.paymentUpdateUrlTemplate, this.editEntry.id);
+                        const res = await fetch(url, {
+                            method: 'PUT',
+                            headers: {
+                                'Accept': 'application/json',
+                                'Content-Type': 'application/json',
+                                'X-Requested-With': 'XMLHttpRequest',
+                                'X-CSRF-TOKEN': token,
+                            },
+                            body: JSON.stringify({
+                                breakdown: this.editPaymentBreakdown || {},
+                            }),
+                        });
+
+                        const data = await res.json().catch(() => ({}));
+                        if (!res.ok) {
+                            const firstError = data?.errors ? Object.values(data.errors)[0]?.[0] : null;
+                            this.errorMessage = firstError || data?.message || 'Failed to update payment entry.';
+                            return;
+                        }
+
+                        const updated = data?.entry || null;
+                        if (updated) {
+                            this.paymentEntries = (Array.isArray(this.paymentEntries) ? this.paymentEntries : []).map(e =>
+                                (String(e?.id) === String(updated.id)) ? updated : e
+                            );
+                        }
+
+                        // Auto-reset if payment total now matches today's total sales
+                        const total = Math.floor(this.paymentTotal());
+                        const sales = Math.floor(this.todaysTotalSales || 0);
+                        console.log('Auto-reset check after Edit:', { total, sales, match: total === sales });
+                        if (total === sales) {
+                            console.log('Triggering auto-reset...');
+                            this.paymentEntries = [];
+                            this.paymentBreakdown = this.paymentDenominations.reduce((acc, d) => {
+                                acc[String(d)] = 0;
+                                return acc;
+                            }, {});
+                            this.gcashAmount = '';
+                            // Reset todaysTotalSales to 0 so UI reflects cleared day
+                            this.todaysTotalSales = 0;
+                            // Call backend to mark today's sales as reconciled
+                            if (this.resetTodaysSalesUrl) {
+                                fetch(this.resetTodaysSalesUrl, {
+                                    method: 'POST',
+                                    headers: {
+                                        'Accept': 'application/json',
+                                        'Content-Type': 'application/json',
+                                        'X-Requested-With': 'XMLHttpRequest',
+                                        'X-CSRF-TOKEN': document.querySelector('meta[name="csrf-token"]')?.getAttribute('content') || '',
+                                    },
+                                }).catch(() => {});
+                            }
+                            console.log('Auto-reset done.');
+                        }
+
+                        this.closeEditEntry();
+                        this.showToast(data?.message || 'Payment entry updated.');
+                    } catch (e) {
+                        this.errorMessage = 'Failed to update payment entry.';
+                    } finally {
+                        this.editSaving = false;
+                    }
+                },
+
+                async deleteEntry(entry) {
+                    this.errorMessage = '';
+                    if (!entry || !this.paymentDeleteUrlTemplate) {
+                        this.errorMessage = 'Delete endpoint not configured.';
+                        return;
+                    }
+
+                    if (!confirm('Delete this payment entry?')) return;
+
+                    const token = document.querySelector('meta[name="csrf-token"]')?.getAttribute('content') || null;
+                    if (!token) {
+                        this.errorMessage = 'Security token not found. Please refresh the page and try again.';
+                        return;
+                    }
+
+                    try {
+                        const url = this.buildEntryUrl(this.paymentDeleteUrlTemplate, entry.id);
+                        const res = await fetch(url, {
+                            method: 'DELETE',
+                            headers: {
+                                'Accept': 'application/json',
+                                'Content-Type': 'application/json',
+                                'X-Requested-With': 'XMLHttpRequest',
+                                'X-CSRF-TOKEN': token,
+                            },
+                        });
+
+                        const data = await res.json().catch(() => ({}));
+                        if (!res.ok) {
+                            this.errorMessage = data?.message || 'Failed to delete payment entry.';
+                            return;
+                        }
+
+                        this.paymentEntries = (Array.isArray(this.paymentEntries) ? this.paymentEntries : []).filter(e =>
+                            String(e?.id) !== String(entry.id)
+                        );
+                        this.showToast(data?.message || 'Payment entry deleted.');
+                    } catch (e) {
+                        this.errorMessage = 'Failed to delete payment entry.';
+                    }
                 },
 
                 setPaymentType(type) {
@@ -400,6 +717,36 @@
                         if (entry) {
                             this.paymentEntries = [entry, ...(Array.isArray(this.paymentEntries) ? this.paymentEntries : [])];
                         }
+
+                        // Auto-reset if payment total now matches today's total sales
+                        const total = Math.floor(this.paymentTotal());
+                        const sales = Math.floor(this.todaysTotalSales || 0);
+                        console.log('Auto-reset check after Save:', { total, sales, match: total === sales });
+                        if (total === sales) {
+                            console.log('Triggering auto-reset...');
+                            this.paymentEntries = [];
+                            this.paymentBreakdown = this.paymentDenominations.reduce((acc, d) => {
+                                acc[String(d)] = 0;
+                                return acc;
+                            }, {});
+                            this.gcashAmount = '';
+                            // Reset todaysTotalSales to 0 so UI reflects cleared day
+                            this.todaysTotalSales = 0;
+                            // Call backend to mark today's sales as reconciled
+                            if (this.resetTodaysSalesUrl) {
+                                fetch(this.resetTodaysSalesUrl, {
+                                    method: 'POST',
+                                    headers: {
+                                        'Accept': 'application/json',
+                                        'Content-Type': 'application/json',
+                                        'X-Requested-With': 'XMLHttpRequest',
+                                        'X-CSRF-TOKEN': document.querySelector('meta[name="csrf-token"]')?.getAttribute('content') || '',
+                                    },
+                                }).catch(() => {});
+                            }
+                            console.log('Auto-reset done.');
+                        }
+
                         this.resetPayment();
                         this.showToast(data?.message || 'Payment entry saved.');
                     } catch (e) {

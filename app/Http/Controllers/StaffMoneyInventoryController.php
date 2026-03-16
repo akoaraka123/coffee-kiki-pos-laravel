@@ -59,6 +59,12 @@ class StaffMoneyInventoryController extends Controller
             ->where('created_by', $user->id)
             ->where('status', 'paid')
             ->whereDate('created_at', $date)
+            ->whereNotExists(function ($query) use ($user, $date) {
+                $query->select(DB::raw(1))
+                    ->from('daily_sales_reconciliations')
+                    ->whereColumn('daily_sales_reconciliations.user_id', 'orders.created_by')
+                    ->where('daily_sales_reconciliations.date', $date);
+            })
             ->sum('total_amount');
 
         return view('staff.money-inventory', [
@@ -224,6 +230,160 @@ class StaffMoneyInventoryController extends Controller
                     'quantity' => (int) $i->quantity,
                 ])->values()->all(),
             ],
+        ]);
+    }
+
+    public function updatePaymentEntry(Request $request, PaymentEntry $entry): JsonResponse
+    {
+        $blocked = $this->ensureClockedOut($request);
+        if ($blocked) {
+            return $blocked;
+        }
+
+        $user = $request->user();
+        if (! $user || (int) $entry->user_id !== (int) $user->id) {
+            return response()->json([
+                'message' => 'Not authorized.',
+            ], 403);
+        }
+
+        $today = Carbon::today()->toDateString();
+        if ($entry->date?->toDateString() !== $today) {
+            return response()->json([
+                'message' => 'Only today\'s entries can be edited.',
+            ], 422);
+        }
+
+        $validated = $request->validate([
+            'breakdown' => ['required', 'array'],
+        ]);
+
+        $rawBreakdown = $validated['breakdown'] ?? [];
+        $cleanBreakdown = [];
+        foreach (self::PAYMENT_DENOMINATIONS as $denom) {
+            $qty = $rawBreakdown[$denom] ?? $rawBreakdown[(string) $denom] ?? 0;
+            $qty = is_numeric($qty) ? (int) $qty : 0;
+            if ($qty < 0) {
+                $qty = 0;
+            }
+            $cleanBreakdown[$denom] = $qty;
+        }
+
+        $amount = 0;
+        foreach ($cleanBreakdown as $denom => $qty) {
+            $amount += ((int) $denom) * ((int) $qty);
+        }
+
+        if ($amount <= 0) {
+            return response()->json([
+                'message' => 'Received amount is required.',
+                'errors' => [
+                    'breakdown' => ['Received amount is required.'],
+                ],
+            ], 422);
+        }
+
+        DB::transaction(function () use ($entry, $cleanBreakdown, $amount): void {
+            $entry->received_amount = (int) $amount;
+            $entry->save();
+
+            foreach ($cleanBreakdown as $denom => $qty) {
+                if ($qty > 0) {
+                    PaymentEntryItem::query()->updateOrCreate(
+                        [
+                            'payment_entry_id' => (int) $entry->id,
+                            'denomination' => (int) $denom,
+                        ],
+                        [
+                            'quantity' => (int) $qty,
+                        ]
+                    );
+                } else {
+                    PaymentEntryItem::query()
+                        ->where('payment_entry_id', (int) $entry->id)
+                        ->where('denomination', (int) $denom)
+                        ->delete();
+                }
+            }
+        });
+
+        $entry->load(['items' => function ($q) {
+            $q->orderByDesc('denomination');
+        }]);
+
+        return response()->json([
+            'message' => 'Payment entry updated.',
+            'entry' => [
+                'id' => (int) $entry->id,
+                'payment_type' => (string) $entry->payment_type,
+                'received_amount' => (int) $entry->received_amount,
+                'created_at' => $entry->created_at?->toIso8601String(),
+                'items' => $entry->items->map(fn (PaymentEntryItem $i) => [
+                    'denomination' => (int) $i->denomination,
+                    'quantity' => (int) $i->quantity,
+                ])->values()->all(),
+            ],
+        ]);
+    }
+
+    public function resetTodaysSales(Request $request): JsonResponse
+    {
+        $blocked = $this->ensureClockedOut($request);
+        if ($blocked) {
+            return $blocked;
+        }
+
+        $user = $request->user();
+        $today = Carbon::today()->toDateString();
+
+        // Option 1: Mark orders as 'reconciled' or add a flag so they are excluded from todaysTotalSales
+        // For now, we'll create a simple reconciliation record to prevent double-counting
+        DB::table('daily_sales_reconciliations')->updateOrInsert(
+            [
+                'user_id' => $user->id,
+                'date' => $today,
+            ],
+            [
+                'reconciled_at' => now(),
+                'total_sales' => Order::query()
+                    ->where('created_by', $user->id)
+                    ->where('status', 'paid')
+                    ->whereDate('created_at', $today)
+                    ->sum('total_amount'),
+            ]
+        );
+
+        return response()->json([
+            'message' => 'Today\'s sales reconciled.',
+        ]);
+    }
+
+    public function deletePaymentEntry(Request $request, PaymentEntry $entry): JsonResponse
+    {
+        $blocked = $this->ensureClockedOut($request);
+        if ($blocked) {
+            return $blocked;
+        }
+
+        $user = $request->user();
+        if (! $user || (int) $entry->user_id !== (int) $user->id) {
+            return response()->json([
+                'message' => 'Not authorized.',
+            ], 403);
+        }
+
+        $today = Carbon::today()->toDateString();
+        if ($entry->date?->toDateString() !== $today) {
+            return response()->json([
+                'message' => 'Only today\'s entries can be deleted.',
+            ], 422);
+        }
+
+        $entry->delete();
+
+        return response()->json([
+            'message' => 'Payment entry deleted.',
+            'id' => (int) $entry->id,
         ]);
     }
 }

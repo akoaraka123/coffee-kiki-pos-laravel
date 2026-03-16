@@ -19,6 +19,7 @@ window.posOrder = function posOrder(initialLayout) {
         cart: [],
         paymentType: 'cash',
         cashReceived: '',
+        gcashReference: '',
         customerName: '',
         checkoutModal: false,
         checkoutError: '',
@@ -134,6 +135,16 @@ window.posOrder = function posOrder(initialLayout) {
                         el.scrollIntoView({ block: 'nearest', inline: 'nearest', behavior: 'smooth' });
                     }
                 });
+            });
+
+            this.$watch('paymentType', (value) => {
+                if (value !== 'cash') {
+                    this.cashReceived = '';
+                }
+
+                if (value !== 'gcash') {
+                    this.gcashReference = '';
+                }
             });
         },
         toggleSidebar() {
@@ -400,6 +411,7 @@ window.posOrder = function posOrder(initialLayout) {
                         items: JSON.stringify(this.payloadItems()),
                         payment_type: this.paymentType,
                         cash_received: this.paymentType === 'cash' ? Number(this.cashReceived || 0) : null,
+                        gcash_reference: this.paymentType === 'gcash' ? String(this.gcashReference || '').trim() || null : null,
                         total_amount: Number(this.formatPrice(this.total())),
                     }),
                 });

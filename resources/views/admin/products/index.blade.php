@@ -59,7 +59,11 @@
                 <div class="group rounded-2xl border border-white/10 bg-white/5 shadow-lg hover:bg-white/10 transition p-5 flex flex-col h-full">
                     <div class="flex items-start justify-between gap-3">
                         <h3 class="text-xl font-semibold tracking-wide text-white" x-text="item.product.name"></h3>
-                        <span class="inline-flex items-center rounded-full border border-white/10 bg-white/5 px-3 py-1 text-xs text-white/80" x-text="item.product.is_active ? 'active' : 'inactive'"></span>
+                        <span
+                            class="inline-flex items-center rounded-full border px-3 py-1 text-xs font-semibold shadow-sm"
+                            x-bind:class="item.product.is_active ? 'border-emerald-600 bg-emerald-600 text-white' : 'border-yellow-400 bg-yellow-400 text-slate-900'"
+                            x-text="item.product.is_active ? 'Active' : 'Inactive'"
+                        ></span>
                     </div>
 
                     <div class="mt-1 text-xs text-white/50" x-text="item.product.category"></div>
@@ -91,7 +95,7 @@
                         <form method="POST" :action="item.deleteUrl" x-on:submit.prevent="confirmDelete($event)">
                             @csrf
                             @method('DELETE')
-                            <button type="submit" class="inline-flex items-center px-3 py-2 rounded-lg bg-rose-500/10 text-rose-300 hover:bg-rose-500/20 hover:text-rose-200 font-medium text-sm transition">Delete</button>
+                            <button type="submit" class="inline-flex items-center px-3 py-2 rounded-lg bg-rose-600 text-white hover:bg-rose-500 font-semibold text-sm transition shadow-sm">Delete</button>
                         </form>
                     </div>
                 </div>
