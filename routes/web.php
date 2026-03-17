@@ -29,7 +29,7 @@ Route::get('/dashboard', function () {
 })->middleware(['auth', 'verified'])->name('dashboard');
 
 Route::prefix('admin')
-    ->middleware(['auth', 'verified', 'role:admin'])
+    ->middleware(['auth', 'verified', 'password.current', 'role:admin'])
     ->name('admin.')
     ->group(function () {
         Route::get('/dashboard', AdminDashboardController::class)->name('dashboard');
@@ -64,7 +64,7 @@ Route::prefix('admin')
     });
 
 Route::prefix('staff')
-    ->middleware(['auth', 'verified', 'role:staff'])
+    ->middleware(['auth', 'verified', 'password.current', 'role:staff'])
     ->name('staff.')
     ->group(function () {
         Route::get('/dashboard', StaffDashboardController::class)->name('dashboard');
@@ -75,9 +75,10 @@ Route::prefix('staff')
         Route::put('/money-inventory/payment-entry/{entry}', [StaffMoneyInventoryController::class, 'updatePaymentEntry'])->name('money-inventory.payment-entries.update');
         Route::delete('/money-inventory/payment-entry/{entry}', [StaffMoneyInventoryController::class, 'deletePaymentEntry'])->name('money-inventory.payment-entries.destroy');
         Route::post('/money-inventory/reset-todays-sales', [StaffMoneyInventoryController::class, 'resetTodaysSales'])->name('money-inventory.reset-todays-sales');
+        Route::post('/money-inventory/undo-reconcile', [StaffMoneyInventoryController::class, 'undoTodaysSalesReconciliation'])->name('money-inventory.undo-reconcile');
     });
 
-Route::middleware(['auth', 'verified', 'role:staff'])
+Route::middleware(['auth', 'verified', 'password.current', 'role:staff'])
     ->group(function () {
         Route::get('/orders', [OrderController::class, 'index'])->name('orders.index');
         Route::get('/orders/create', [OrderController::class, 'create'])->name('orders.create');
@@ -87,6 +88,7 @@ Route::middleware(['auth', 'verified', 'role:staff'])
         Route::get('/orders/{order}/details', [OrderController::class, 'details'])->name('orders.details');
         Route::put('/orders/{order}/items/{item}', [OrderController::class, 'updateItem'])->name('orders.items.update');
         Route::delete('/orders/{order}/items/{item}', [OrderController::class, 'deleteItem'])->name('orders.items.delete');
+        Route::delete('/orders/{order}', [OrderController::class, 'destroy'])->name('orders.destroy');
     });
 
 Route::middleware('auth')->group(function () {

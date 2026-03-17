@@ -38,6 +38,8 @@
                         @forelse ($users as $user)
                             @php
                                 $showEditModal = (int) session('editUserId') === (int) $user->id;
+                                $primaryAdminId = \App\Models\User::query()->where('role', 'admin')->orderBy('id')->value('id');
+                                $isPrimaryAdmin = $user->role === 'admin' && (int) $primaryAdminId === (int) $user->id;
                             @endphp
                             <tr>
                                 <td class="px-5 py-4">{{ $user->name }}</td>
@@ -58,11 +60,13 @@
                                         >
                                             Edit
                                         </button>
-                                        <form method="POST" action="{{ route('admin.users.destroy', $user) }}" onsubmit="return confirm('Delete this account?');">
-                                            @csrf
-                                            @method('DELETE')
-                                            <button type="submit" class="text-xs text-rose-300 hover:text-rose-200 underline decoration-rose-300/30">Delete</button>
-                                        </form>
+                                        @if (strtolower((string) ($user->role ?? '')) !== 'admin')
+                                            <form method="POST" action="{{ route('admin.users.destroy', $user) }}" onsubmit="return confirm('Delete this account?');">
+                                                @csrf
+                                                @method('DELETE')
+                                                <button type="submit" class="text-xs text-rose-300 hover:text-rose-200 underline decoration-rose-300/30">Delete</button>
+                                            </form>
+                                        @endif
                                     </div>
                                 </td>
                             </tr>
@@ -109,10 +113,13 @@
 
                                             <div class="sm:col-span-2">
                                                 <label for="edit-role-{{ $user->id }}" class="text-xs text-white/60">Role</label>
-                                                <select id="edit-role-{{ $user->id }}" name="role" class="mt-2 w-full rounded-xl border border-white/10 bg-[#111] px-4 py-3 text-white focus:outline-none focus:ring-2 focus:ring-white/20">
+                                                <select id="edit-role-{{ $user->id }}" name="role" class="mt-2 w-full rounded-xl border border-white/10 bg-[#111] px-4 py-3 text-white focus:outline-none focus:ring-2 focus:ring-white/20" {{ $isPrimaryAdmin ? 'disabled' : '' }}>
                                                     <option value="staff" {{ ($showEditModal ? old('role', $user->role) : $user->role) === 'staff' ? 'selected' : '' }}>Staff</option>
                                                     <option value="admin" {{ ($showEditModal ? old('role', $user->role) : $user->role) === 'admin' ? 'selected' : '' }}>Admin</option>
                                                 </select>
+                                                @if ($isPrimaryAdmin)
+                                                    <input type="hidden" name="role" value="{{ $showEditModal ? old('role', $user->role) : $user->role }}" />
+                                                @endif
                                             </div>
 
                                             <div>

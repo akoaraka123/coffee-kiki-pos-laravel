@@ -39,10 +39,13 @@
 
                     <div class="sm:col-span-2">
                         <label for="role" class="text-xs text-white/60">Role</label>
-                        <select id="role" name="role" class="mt-2 w-full rounded-xl border border-white/10 bg-[#111] px-4 py-3 text-white focus:outline-none focus:ring-2 focus:ring-white/20">
+                        <select id="role" name="role" class="mt-2 w-full rounded-xl border border-white/10 bg-[#111] px-4 py-3 text-white focus:outline-none focus:ring-2 focus:ring-white/20" {{ !empty($isPrimaryAdmin) ? 'disabled' : '' }}>
                             <option value="staff" {{ old('role', $user->role) === 'staff' ? 'selected' : '' }}>Staff</option>
                             <option value="admin" {{ old('role', $user->role) === 'admin' ? 'selected' : '' }}>Admin</option>
                         </select>
+                        @if (!empty($isPrimaryAdmin))
+                            <input type="hidden" name="role" value="{{ old('role', $user->role) }}" />
+                        @endif
                     </div>
 
                     <div>

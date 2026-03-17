@@ -454,6 +454,45 @@ class OrderController extends Controller
         return response()->json($result);
     }
 
+    public function destroy(Request $request, Order $order): RedirectResponse|JsonResponse
+    {
+        $user = $request->user();
+        if (! $user || (method_exists($user, 'isAdmin') && $user->isAdmin())) {
+            abort(403);
+        }
+
+        if ((int) $order->created_by !== (int) $user->id) {
+            abort(403);
+        }
+
+        if ((string) $order->status === 'paid') {
+            $message = 'Paid orders cannot be deleted.';
+            if ($request->expectsJson()) {
+                return response()->json([
+                    'message' => $message,
+                ], 422);
+            }
+
+            return redirect()->route('orders.index')->with('status', $message);
+        }
+
+        $orderNumber = (string) $order->order_number;
+
+        DB::transaction(function () use ($order): void {
+            $order->delete();
+        });
+
+        $message = "Order {$orderNumber} deleted.";
+        if ($request->expectsJson()) {
+            return response()->json([
+                'message' => $message,
+                'id' => (int) $order->id,
+            ]);
+        }
+
+        return redirect()->route('orders.index')->with('status', $message);
+    }
+
     public function deleteItem(Request $request, Order $order, OrderItem $item): JsonResponse
     {
         $user = $request->user();

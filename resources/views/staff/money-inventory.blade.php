@@ -7,11 +7,17 @@
         class="space-y-6"
         x-data="moneyInventory({
             date: @js($date),
+            dateDisplay: @js($dateDisplay ?? $date),
             denominations: @js($denominations),
             quantities: @js($quantities),
             saveUrl: @js(route('staff.money-inventory.save')),
             clockedIn: @js((bool) ($clockedIn ?? false)),
             todaysTotalSales: @js((float) ($todaysTotalSales ?? 0)),
+            todaysCashSales: @js((float) ($todaysCashSales ?? 0)),
+            todaysGcashSales: @js((float) ($todaysGcashSales ?? 0)),
+            lowerTodaysTotalSales: @js((float) ($lowerTodaysTotalSales ?? $todaysTotalSales ?? 0)),
+            reconciledToday: @js((bool) ($reconciledToday ?? false)),
+            reconciledAt: @js($reconciledAt ?? null),
             paymentDenominations: @js($paymentDenominations ?? []),
             paymentEntries: @js(($paymentEntries ?? collect())->map(fn ($e) => [
                 'id' => (int) $e->id,
@@ -27,16 +33,23 @@
             paymentUpdateUrlTemplate: @js(route('staff.money-inventory.payment-entries.update', ['entry' => '__ENTRY__'])),
             paymentDeleteUrlTemplate: @js(route('staff.money-inventory.payment-entries.destroy', ['entry' => '__ENTRY__'])),
             resetTodaysSalesUrl: @js(route('staff.money-inventory.reset-todays-sales')),
+            undoReconcileUrl: @js(route('staff.money-inventory.undo-reconcile')),
         })"
         x-init="init()"
     >
         <div class="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
             <div>
-                <h2 class="text-xl font-semibold">Today</h2>
-                <p class="mt-1 text-sm text-white/50">Record your physical cash denominations for {{ $date }}.</p>
+                <h2 class="text-xl font-semibold" x-text="dateDisplay"></h2>
+                <p class="mt-1 text-sm text-white/50">Record your physical cash denominations for <span x-text="dateDisplay"></span>.</p>
             </div>
 
             <div class="flex flex-col gap-3 sm:flex-row sm:items-center">
+                <input
+                    type="date"
+                    class="w-full rounded-xl border border-white/10 bg-white/5 px-4 py-2 text-sm font-medium text-white/80 shadow-sm hover:bg-white/10 sm:w-auto"
+                    x-model="date"
+                    x-on:change="window.location = `${window.location.pathname}?date=${encodeURIComponent(date)}`"
+                />
                 <button
                     type="button"
                     class="inline-flex items-center justify-center rounded-xl bg-[#efe9df] px-4 py-2 text-sm font-semibold text-[#1c1c1c] shadow-sm hover:opacity-95 disabled:opacity-60"
@@ -57,9 +70,21 @@
         </div>
 
         <div x-show="!clockedIn" x-cloak class="rounded-2xl border border-white/10 bg-gradient-to-r from-emerald-600/25 via-white/5 to-sky-600/20 p-6 shadow-sm">
-            <div class="text-sm font-semibold text-white/80">Today's Total Sales</div>
-            <div class="mt-2 text-5xl font-extrabold tracking-tight text-white" x-text="formatCurrency(todaysTotalSales)"></div>
-            <div class="mt-2 text-xs text-white/50">Automatically calculated from paid orders created today.</div>
+            <div class="grid grid-cols-1 gap-6 sm:grid-cols-3">
+                <div>
+                    <div class="text-sm font-semibold text-white/80" x-text="`Total Sales (${dateDisplay})`"></div>
+                    <div class="mt-2 text-5xl font-extrabold tracking-tight text-white" x-text="formatCurrency(todaysTotalSales)"></div>
+                </div>
+                <div>
+                    <div class="text-sm font-semibold text-white/80" x-text="`Total Cash Received (${dateDisplay})`"></div>
+                    <div class="mt-2 text-5xl font-extrabold tracking-tight text-white" x-text="formatCurrency(todaysCashSales)"></div>
+                </div>
+                <div>
+                    <div class="text-sm font-semibold text-white/80" x-text="`Total GCash Payments (${dateDisplay})`"></div>
+                    <div class="mt-2 text-5xl font-extrabold tracking-tight text-white" x-text="formatCurrency(todaysGcashSales)"></div>
+                </div>
+            </div>
+            <div class="mt-2 text-xs text-white/50" x-text="`Automatically calculated from paid orders created on ${dateDisplay}.`"></div>
         </div>
 
         <template x-if="toastOpen">
@@ -131,15 +156,21 @@
                         <div class="mt-1 text-3xl font-semibold" x-text="formatCurrency(paymentTotal())"></div>
                         <div
                             class="mt-3 rounded-xl border px-4 py-3 text-sm"
-                            x-bind:class="paymentTotal() === Math.floor(todaysTotalSales || 0)
+                            x-bind:class="paymentTotal() === Math.floor((paymentType === 'gcash' ? (todaysGcashSales || 0) : (todaysCashSales || 0)))
                                 ? 'border-emerald-500/30 bg-emerald-500/10 text-emerald-200'
                                 : 'border-rose-500/30 bg-rose-500/10 text-rose-200'"
                         >
                             <div class="flex items-center justify-between">
-                                <span class="font-semibold">Today's Total Sales</span>
-                                <span class="font-semibold" x-text="formatCurrency(todaysTotalSales)"></span>
+                                <span class="font-semibold" x-text="paymentType === 'gcash' ? 'Total GCash Payments Today' : 'Total Cash Received Today'"></span>
+                                <span class="font-semibold" x-text="formatCurrency(paymentType === 'gcash' ? todaysGcashSales : todaysCashSales)"></span>
                             </div>
-                            <div class="mt-1 text-xs" x-text="paymentTotal() === Math.floor(todaysTotalSales || 0) ? 'Matched' : 'Not matched'"> </div>
+                            <div class="mt-1 text-xs" x-text="paymentTotal() === Math.floor((paymentType === 'gcash' ? (todaysGcashSales || 0) : (todaysCashSales || 0))) ? 'Matched' : 'Not matched'"> </div>
+                        </div>
+                        <div class="mt-3 rounded-xl border border-white/10 bg-[#111]/40 px-4 py-3 text-sm">
+                            <div class="flex items-center justify-between">
+                                <span class="font-semibold text-white/80" x-text="paymentType === 'gcash' ? 'Total Cash Received Today' : 'Total GCash Payments Today'"></span>
+                                <span class="font-semibold" x-text="formatCurrency(paymentType === 'gcash' ? todaysCashSales : todaysGcashSales)"></span>
+                            </div>
                         </div>
                         <template x-if="paymentType === 'gcash'">
                             <div class="mt-4">
@@ -177,47 +208,63 @@
 
             <div class="mt-6">
                 <div class="text-sm font-semibold">Today’s Payment Entries</div>
-                <div class="mt-1 text-xs text-white/50">Saved entries for {{ $date }} (this user).</div>
+                <div class="mt-1 text-xs text-white/50">Saved entries for {{ $dateDisplay ?? $date }} (this user).</div>
 
-                <div class="mt-4 grid grid-cols-1 gap-3">
+                <div class="mt-4 overflow-hidden rounded-xl border border-white/10 bg-[#111]/40">
+                    <div class="flex flex-col gap-3 border-b border-white/10 px-5 py-4 sm:flex-row sm:items-center sm:justify-between">
+                        <div>
+                            <div class="text-sm font-semibold">Entries</div>
+                            <div class="mt-1 text-xs text-white/60">Cash / GCash breakdowns</div>
+                        </div>
+                        <div class="rounded-xl border border-white/10 bg-[#111]/30 px-4 py-3">
+                            <div class="text-xs font-semibold text-white/60" x-text="`Total Sales (${dateDisplay})`"></div>
+                            <div class="mt-1 text-lg font-semibold" x-text="formatCurrency(lowerTodaysTotalSales)"></div>
+                        </div>
+                    </div>
+
                     <template x-if="!Array.isArray(paymentEntries) || paymentEntries.length === 0">
-                        <div class="rounded-xl border border-white/10 bg-[#111]/40 px-4 py-3 text-sm text-white/60">No entries yet.</div>
+                        <div class="px-5 py-4 text-sm text-white/60">No entries yet.</div>
                     </template>
 
-                    <template x-for="entry in paymentEntries" :key="entry.id">
-                        <div class="rounded-xl border border-white/10 bg-[#111]/40 p-4">
-                            <div class="flex items-center justify-between gap-3">
-                                <div>
-                                    <div class="text-sm font-semibold" x-text="entry.payment_type === 'gcash' ? 'GCash' : 'Cash'"></div>
-                                    <div class="mt-0.5 text-xs text-white/50" x-text="formatEntryTime(entry.created_at)"></div>
-                                </div>
+                    <template x-if="Array.isArray(paymentEntries) && paymentEntries.length > 0">
+                        <div class="divide-y divide-white/10">
+                            <template x-for="entry in paymentEntries" :key="entry.id">
+                                <div class="px-5 py-4">
+                                    <div class="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+                                        <div>
+                                            <div class="text-sm font-semibold" x-text="entry.payment_type === 'gcash' ? 'GCash' : 'Cash'"></div>
+                                            <div class="mt-0.5 text-xs text-white/50" x-text="formatEntryTime(entry.created_at)"></div>
+                                        </div>
 
-                                <div class="flex items-center gap-2">
-                                    <div class="mr-2 text-lg font-semibold" x-text="formatCurrency(entry.received_amount)"></div>
-                                    <button
-                                        type="button"
-                                        class="inline-flex items-center justify-center rounded-lg bg-sky-600 px-3 py-2 text-xs font-semibold text-white hover:bg-sky-500"
-                                        x-on:click="openEditEntry(entry)"
-                                    >
-                                        Edit
-                                    </button>
-                                    <button
-                                        type="button"
-                                        class="inline-flex items-center justify-center rounded-lg bg-rose-600 px-3 py-2 text-xs font-semibold text-white hover:bg-rose-500"
-                                        x-on:click="deleteEntry(entry)"
-                                    >
-                                        Delete
-                                    </button>
-                                </div>
-                            </div>
-                            <div class="mt-3 grid grid-cols-2 gap-2 sm:grid-cols-4">
-                                <template x-for="it in (entry.items || [])" :key="entry.id + '-' + it.denomination">
-                                    <div class="rounded-xl border border-white/10 bg-white/5 px-3 py-2 text-xs text-white/80">
-                                        <div class="font-semibold" x-text="formatDenomination(it.denomination)"></div>
-                                        <div class="text-white/60" x-text="'Qty: ' + it.quantity"></div>
+                                        <div class="flex items-center gap-2">
+                                            <div class="mr-2 text-lg font-semibold" x-text="formatCurrency(entry.received_amount)"></div>
+                                            <button
+                                                type="button"
+                                                class="inline-flex items-center justify-center rounded-lg bg-sky-600 px-3 py-2 text-xs font-semibold text-white hover:bg-sky-500"
+                                                x-on:click="openEditEntry(entry)"
+                                            >
+                                                Edit
+                                            </button>
+                                            <button
+                                                type="button"
+                                                class="inline-flex items-center justify-center rounded-lg bg-rose-600 px-3 py-2 text-xs font-semibold text-white hover:bg-rose-500"
+                                                x-on:click="deleteEntry(entry)"
+                                            >
+                                                Delete
+                                            </button>
+                                        </div>
                                     </div>
-                                </template>
-                            </div>
+
+                                    <div class="mt-3 grid grid-cols-2 gap-2 sm:grid-cols-4">
+                                        <template x-for="it in (entry.items || [])" :key="entry.id + '-' + it.denomination">
+                                            <div class="rounded-xl border border-white/10 bg-white/5 px-3 py-2 text-xs text-white/80">
+                                                <div class="font-semibold" x-text="formatDenomination(it.denomination)"></div>
+                                                <div class="text-white/60" x-text="'Qty: ' + it.quantity"></div>
+                                            </div>
+                                        </template>
+                                    </div>
+                                </div>
+                            </template>
                         </div>
                     </template>
                 </div>
@@ -236,15 +283,15 @@
                             <div class="mt-1 text-3xl font-semibold" x-text="formatCurrency(editPaymentTotal())"></div>
                             <div
                                 class="mt-3 rounded-xl border px-3 py-2 text-sm"
-                                x-bind:class="editPaymentTotal() === Math.floor(todaysTotalSales || 0)
+                                x-bind:class="editPaymentTotal() === Math.floor(lowerTodaysTotalSales || 0)
                                     ? 'border-emerald-500/30 bg-emerald-500/10 text-emerald-200'
                                     : 'border-rose-500/30 bg-rose-500/10 text-rose-200'"
                             >
                                 <div class="flex items-center justify-between">
                                     <span class="font-semibold">Today's Total Sales</span>
-                                    <span class="font-semibold" x-text="formatCurrency(todaysTotalSales)"></span>
+                                    <span class="font-semibold" x-text="formatCurrency(lowerTodaysTotalSales)"></span>
                                 </div>
-                                <div class="mt-1 text-xs" x-text="editPaymentTotal() === Math.floor(todaysTotalSales || 0) ? 'Matched' : 'Not matched'"> </div>
+                                <div class="mt-1 text-xs" x-text="editPaymentTotal() === Math.floor(lowerTodaysTotalSales || 0) ? 'Matched' : 'Not matched'"> </div>
                             </div>
                         </div>
 
@@ -312,6 +359,7 @@
         function moneyInventory(payload) {
             return {
                 date: payload?.date || '',
+                dateDisplay: payload?.dateDisplay || payload?.date || '',
                 denominations: Array.isArray(payload?.denominations) ? payload.denominations : [],
                 quantities: payload?.quantities || {},
                 initialQuantities: {},
@@ -323,6 +371,8 @@
 
                 clockedIn: Boolean(payload?.clockedIn ?? false),
                 todaysTotalSales: Number(payload?.todaysTotalSales || 0),
+                todaysCashSales: Number(payload?.todaysCashSales || 0),
+                todaysGcashSales: Number(payload?.todaysGcashSales || 0),
 
                 paymentDenominations: Array.isArray(payload?.paymentDenominations) ? payload.paymentDenominations : [],
                 paymentSaveUrl: payload?.paymentSaveUrl || '',
@@ -334,7 +384,12 @@
                 initialPaymentBreakdown: {},
                 paymentEntries: Array.isArray(payload?.paymentEntries) ? payload.paymentEntries : [],
                 paymentSaving: false,
-                gcashAmount: '',
+                lowerTodaysTotalSales: Number(payload?.lowerTodaysTotalSales || payload?.todaysTotalSales || 0), // Separate for lower ENTRIES display
+
+                reconciling: false,
+                reconciled: Boolean(payload?.reconciledToday ?? false),
+                reconciledAt: payload?.reconciledAt || null,
+                undoReconcileUrl: payload?.undoReconcileUrl || '',
 
                 editEntryOpen: false,
                 editEntry: null,
@@ -357,8 +412,79 @@
                     this.initialPaymentBreakdown = JSON.parse(JSON.stringify(this.paymentBreakdown || {}));
 
                     if (!this.clockedIn) {
-                        this.showToast(`Today's Total Sales: ${this.formatCurrency(this.todaysTotalSales)}`);
+                        this.showToast(`Total Sales (${this.dateDisplay}): ${this.formatCurrency(this.todaysTotalSales)}`);
                     }
+
+                    this.scheduleMidnightRollover();
+                    this.startSalesPolling();
+                },
+
+                startSalesPolling() {
+                    if (!this.isViewingToday()) return;
+
+                    window.clearInterval(this.__salesPoller);
+                    this.__salesPoller = window.setInterval(async () => {
+                        try {
+                            const url = `${window.location.pathname}?date=${encodeURIComponent(this.date)}`;
+                            const res = await fetch(url, {
+                                method: 'GET',
+                                headers: {
+                                    'Accept': 'application/json',
+                                    'X-Requested-With': 'XMLHttpRequest',
+                                },
+                            });
+
+                            const data = await res.json().catch(() => ({}));
+                            if (!res.ok) return;
+
+                            const nextTotal = Number(data?.summary?.total_sales || 0);
+                            const nextCash = Number(data?.summary?.cash || 0);
+                            const nextGcash = Number(data?.summary?.gcash || 0);
+                            const nextLower = Number(data?.summary?.lower_total_sales || 0);
+                            const nextReconciled = Boolean(data?.reconciled ?? false);
+                            const nextReconciledAt = data?.reconciled_at ?? null;
+                            const nextDateDisplay = String(data?.date_display || this.dateDisplay || '').trim();
+
+                            const prevTotal = Number(this.todaysTotalSales || 0);
+                            const prevReconciled = Boolean(this.reconciled);
+
+                            this.dateDisplay = nextDateDisplay || this.dateDisplay;
+                            this.lowerTodaysTotalSales = Number.isFinite(nextLower) ? nextLower : this.lowerTodaysTotalSales;
+                            this.todaysTotalSales = Number.isFinite(nextTotal) ? nextTotal : this.todaysTotalSales;
+                            this.todaysCashSales = Number.isFinite(nextCash) ? nextCash : this.todaysCashSales;
+                            this.todaysGcashSales = Number.isFinite(nextGcash) ? nextGcash : this.todaysGcashSales;
+                            this.reconciled = nextReconciled;
+                            this.reconciledAt = nextReconciledAt || this.reconciledAt;
+
+                            if (prevReconciled && !nextReconciled && nextTotal > 0) {
+                                this.showToast(`New sales detected (${this.dateDisplay}). Please record the next transaction.`);
+                            } else if (nextTotal > prevTotal && nextTotal > 0) {
+                                this.showToast(`Sales updated (${this.dateDisplay}): ${this.formatCurrency(nextTotal)}`);
+                            }
+                        } catch (e) {
+                            // ignore polling errors
+                        }
+                    }, 10000);
+                },
+
+                scheduleMidnightRollover() {
+                    if (!this.isViewingToday()) return;
+
+                    const now = new Date();
+                    const next = new Date(now);
+                    next.setHours(24, 0, 0, 0);
+                    const ms = next.getTime() - now.getTime();
+                    if (!Number.isFinite(ms) || ms <= 0) return;
+
+                    window.clearTimeout(this.__midnightTimer);
+                    this.__midnightTimer = window.setTimeout(() => {
+                        const d = new Date();
+                        const y = d.getFullYear();
+                        const m = String(d.getMonth() + 1).padStart(2, '0');
+                        const day = String(d.getDate()).padStart(2, '0');
+                        const iso = `${y}-${m}-${day}`;
+                        window.location = `${window.location.pathname}?date=${encodeURIComponent(iso)}`;
+                    }, ms + 1000);
                 },
 
                 quantity(d) {
@@ -398,6 +524,137 @@
                     return (this.denominations || []).reduce((sum, d) => sum + this.subtotal(d), 0);
                 },
 
+                paymentsTotalByType(type) {
+                    const t = String(type || '').toLowerCase();
+                    return (this.paymentEntries || [])
+                        .filter(e => String(e?.payment_type || '').toLowerCase() === t)
+                        .reduce((sum, e) => sum + (Number(e?.received_amount || 0) || 0), 0);
+                },
+
+                paymentEntriesAfterCutoff() {
+                    const cutoffRaw = this.reconciledAt;
+                    if (!cutoffRaw) return (this.paymentEntries || []);
+
+                    const cutoff = Date.parse(String(cutoffRaw));
+                    if (!Number.isFinite(cutoff)) return (this.paymentEntries || []);
+
+                    return (this.paymentEntries || []).filter(e => {
+                        const ts = Date.parse(String(e?.created_at || ''));
+                        if (!Number.isFinite(ts)) return false;
+                        return ts > cutoff;
+                    });
+                },
+
+                paymentsTotalByTypeAfterCutoff(type) {
+                    const t = String(type || '').toLowerCase();
+                    return this.paymentEntriesAfterCutoff()
+                        .filter(e => String(e?.payment_type || '').toLowerCase() === t)
+                        .reduce((sum, e) => sum + (Number(e?.received_amount || 0) || 0), 0);
+                },
+
+                isViewingToday() {
+                    const now = new Date();
+                    const y = now.getFullYear();
+                    const m = String(now.getMonth() + 1).padStart(2, '0');
+                    const d = String(now.getDate()).padStart(2, '0');
+                    const today = `${y}-${m}-${d}`;
+                    return String(this.date || '') === today;
+                },
+
+                async maybeReconcileDay() {
+                    if (!this.isViewingToday()) return;
+                    if (this.reconciling || this.reconciled) return;
+                    if (!this.resetTodaysSalesUrl) return;
+
+                    const expectedCash = Math.floor(this.todaysCashSales || 0);
+                    const expectedGcash = Math.floor(this.todaysGcashSales || 0);
+                    const expectedAny = (expectedCash + expectedGcash) > 0;
+                    // Only reconcile if there are actual sales totals; do not reconcile when totals are 0
+                    if (!expectedAny) return;
+
+                    const actualCash = Math.floor(this.paymentsTotalByTypeAfterCutoff('cash') || 0);
+                    const actualGcash = Math.floor(this.paymentsTotalByTypeAfterCutoff('gcash') || 0);
+
+                    const cashOk = expectedCash === 0 ? true : actualCash === expectedCash;
+                    const gcashOk = expectedGcash === 0 ? true : actualGcash === expectedGcash;
+
+                    if (!cashOk || !gcashOk) return;
+
+                    const token = document.querySelector('meta[name="csrf-token"]')?.getAttribute('content') || null;
+                    if (!token) return;
+
+                    this.reconciling = true;
+                    try {
+                        const res = await fetch(this.resetTodaysSalesUrl, {
+                            method: 'POST',
+                            headers: {
+                                'Accept': 'application/json',
+                                'Content-Type': 'application/json',
+                                'X-Requested-With': 'XMLHttpRequest',
+                                'X-CSRF-TOKEN': token,
+                            },
+                            body: JSON.stringify({}),
+                        });
+
+                        const data = await res.json().catch(() => ({}));
+                        if (!res.ok) {
+                            return;
+                        }
+
+                        this.reconciled = true;
+                        this.reconciledAt = data?.reconciled_at || new Date().toISOString();
+
+                        // Allow reset in top card totals, but preserve lower ENTRIES section Today's Total Sales
+                        // We'll use a separate variable for the lower section display
+                        this.lowerTodaysTotalSales = this.todaysTotalSales; // Preserve for lower display
+                        this.todaysTotalSales = 0;
+                        this.todaysCashSales = 0;
+                        this.todaysGcashSales = 0;
+                        this.resetPayment();
+                        this.showToast(data?.message || "Today's sales reconciled.");
+                    } finally {
+                        this.reconciling = false;
+                    }
+                },
+
+                async maybeUndoReconcileIfNeeded() {
+                    if (!this.isViewingToday()) return;
+                    if (!this.reconciled) return;
+                    if (!this.undoReconcileUrl) return;
+                    const hasEntries = Array.isArray(this.paymentEntriesAfterCutoff()) && this.paymentEntriesAfterCutoff().length > 0;
+                    if (hasEntries) return;
+
+                    const token = document.querySelector('meta[name="csrf-token"]')?.getAttribute('content') || null;
+                    if (!token) return;
+
+                    try {
+                        const res = await fetch(this.undoReconcileUrl, {
+                            method: 'POST',
+                            headers: {
+                                'Accept': 'application/json',
+                                'Content-Type': 'application/json',
+                                'X-Requested-With': 'XMLHttpRequest',
+                                'X-CSRF-TOKEN': token,
+                            },
+                            body: JSON.stringify({}),
+                        });
+
+                        const data = await res.json().catch(() => ({}));
+                        if (!res.ok) {
+                            return;
+                        }
+
+                        const totals = data?.totals || {};
+                        this.todaysTotalSales = Number(totals?.overall || 0);
+                        this.todaysCashSales = Number(totals?.cash || 0);
+                        this.todaysGcashSales = Number(totals?.gcash || 0);
+                        this.reconciled = false;
+                        this.reconciledAt = null;
+                        this.showToast(data?.message || "Today's reconciliation undone.");
+                    } catch (e) {
+                    }
+                },
+
                 formatDenomination(d) {
                     const denom = Number(d);
                     return `₱${denom.toLocaleString()}`;
@@ -422,14 +679,9 @@
                 },
 
                 openEditEntry(entry) {
-                    this.errorMessage = '';
-                    this.editEntry = entry || null;
-                    const base = (this.paymentDenominations || []).reduce((acc, d) => {
-                        acc[String(d)] = 0;
-                        return acc;
-                    }, {});
-
-                    const items = Array.isArray(entry?.items) ? entry.items : [];
+                    if (!entry || !entry.items) return;
+                    const base = {};
+                    const items = Array.isArray(entry.items) ? entry.items : [];
                     items.forEach(it => {
                         const denom = Number(it?.denomination);
                         const qty = Number(it?.quantity);
@@ -529,9 +781,10 @@
 
                         // Auto-reset if payment total now matches today's total sales
                         const total = Math.floor(this.paymentTotal());
-                        const sales = Math.floor(this.todaysTotalSales || 0);
+                        const sales = Math.floor(this.lowerTodaysTotalSales || 0);
                         console.log('Auto-reset check after Edit:', { total, sales, match: total === sales });
-                        if (total === sales) {
+                        // Only auto-reset if there are actual sales (sales > 0); do not reset when sales are 0
+                        if (total === sales && sales > 0) {
                             console.log('Triggering auto-reset...');
                             this.paymentEntries = [];
                             this.paymentBreakdown = this.paymentDenominations.reduce((acc, d) => {
@@ -539,8 +792,9 @@
                                 return acc;
                             }, {});
                             this.gcashAmount = '';
-                            // Reset todaysTotalSales to 0 so UI reflects cleared day
-                            this.todaysTotalSales = 0;
+                            // Reset todaysTotalSales to 0 so UI reflects cleared day, but only if there were no actual sales
+                            // Since we only enter this block when sales > 0, we should NOT reset todaysTotalSales here
+                            // this.todaysTotalSales = 0; // REMOVED: preserve sales value
                             // Call backend to mark today's sales as reconciled
                             if (this.resetTodaysSalesUrl) {
                                 fetch(this.resetTodaysSalesUrl, {
@@ -601,6 +855,7 @@
                         this.paymentEntries = (Array.isArray(this.paymentEntries) ? this.paymentEntries : []).filter(e =>
                             String(e?.id) !== String(entry.id)
                         );
+                        await this.maybeUndoReconcileIfNeeded();
                         this.showToast(data?.message || 'Payment entry deleted.');
                     } catch (e) {
                         this.errorMessage = 'Failed to delete payment entry.';
@@ -611,9 +866,7 @@
                     const t = String(type || '').toLowerCase();
                     if (t !== 'cash' && t !== 'gcash') return;
                     this.paymentType = t;
-                    if (t !== 'gcash') {
-                        this.gcashAmount = '';
-                    }
+                    this.resetPayment();
                 },
 
                 paymentTypeLabel() {
@@ -689,6 +942,12 @@
                         return;
                     }
 
+                    const expectedTotal = Math.floor(this.paymentType === 'gcash' ? (this.todaysGcashSales || 0) : (this.todaysCashSales || 0));
+                    if (Math.floor(receivedAmount) !== expectedTotal) {
+                        this.errorMessage = `Received amount must match ${this.paymentType === 'gcash' ? 'Total GCash Payments Today' : 'Total Cash Received Today'} (${this.formatCurrency(expectedTotal)}).`;
+                        return;
+                    }
+
                     this.paymentSaving = true;
                     try {
                         const res = await fetch(this.paymentSaveUrl, {
@@ -700,6 +959,7 @@
                                 'X-CSRF-TOKEN': token,
                             },
                             body: JSON.stringify({
+                                date: this.date,
                                 payment_type: this.paymentType,
                                 received_amount: receivedAmount,
                                 breakdown,
@@ -718,34 +978,7 @@
                             this.paymentEntries = [entry, ...(Array.isArray(this.paymentEntries) ? this.paymentEntries : [])];
                         }
 
-                        // Auto-reset if payment total now matches today's total sales
-                        const total = Math.floor(this.paymentTotal());
-                        const sales = Math.floor(this.todaysTotalSales || 0);
-                        console.log('Auto-reset check after Save:', { total, sales, match: total === sales });
-                        if (total === sales) {
-                            console.log('Triggering auto-reset...');
-                            this.paymentEntries = [];
-                            this.paymentBreakdown = this.paymentDenominations.reduce((acc, d) => {
-                                acc[String(d)] = 0;
-                                return acc;
-                            }, {});
-                            this.gcashAmount = '';
-                            // Reset todaysTotalSales to 0 so UI reflects cleared day
-                            this.todaysTotalSales = 0;
-                            // Call backend to mark today's sales as reconciled
-                            if (this.resetTodaysSalesUrl) {
-                                fetch(this.resetTodaysSalesUrl, {
-                                    method: 'POST',
-                                    headers: {
-                                        'Accept': 'application/json',
-                                        'Content-Type': 'application/json',
-                                        'X-Requested-With': 'XMLHttpRequest',
-                                        'X-CSRF-TOKEN': document.querySelector('meta[name="csrf-token"]')?.getAttribute('content') || '',
-                                    },
-                                }).catch(() => {});
-                            }
-                            console.log('Auto-reset done.');
-                        }
+                        await this.maybeReconcileDay();
 
                         this.resetPayment();
                         this.showToast(data?.message || 'Payment entry saved.');
@@ -758,6 +991,11 @@
 
                 reset() {
                     this.errorMessage = '';
+                    // Only allow reset if there are no sales today; otherwise preserve current quantities
+                    if (this.todaysTotalSales > 0) {
+                        this.showToast('Cannot reset while today\'s sales are recorded.');
+                        return;
+                    }
                     this.quantities = JSON.parse(JSON.stringify(this.initialQuantities || {}));
                 },
 
@@ -795,6 +1033,7 @@
                                 'X-CSRF-TOKEN': token,
                             },
                             body: JSON.stringify({
+                                date: this.date,
                                 quantities: this.quantities || {},
                             }),
                         });
@@ -806,7 +1045,10 @@
                             return;
                         }
 
-                        this.initialQuantities = JSON.parse(JSON.stringify(this.quantities || {}));
+                        // Only update initialQuantities if there are no sales; otherwise preserve current quantities
+                        if (this.todaysTotalSales <= 0) {
+                            this.initialQuantities = JSON.parse(JSON.stringify(this.quantities || {}));
+                        }
                         this.showToast(data?.message || 'Money inventory saved.');
                     } catch (e) {
                         this.errorMessage = 'Failed to save money inventory. Please check your connection and try again.';

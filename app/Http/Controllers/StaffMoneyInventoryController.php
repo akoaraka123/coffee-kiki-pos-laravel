@@ -19,6 +19,20 @@ class StaffMoneyInventoryController extends Controller
 
     private const PAYMENT_DENOMINATIONS = [1000, 500, 200, 100, 50, 20, 10, 5, 1];
 
+    private function resolveSelectedDate(Request $request): string
+    {
+        $raw = $request->query('date');
+        if (!is_string($raw) || trim($raw) === '') {
+            return Carbon::today()->toDateString();
+        }
+
+        try {
+            return Carbon::parse($raw)->toDateString();
+        } catch (\Throwable $e) {
+            return Carbon::today()->toDateString();
+        }
+    }
+
     private function ensureClockedOut(Request $request): ?JsonResponse
     {
         $user = $request->user();
@@ -32,7 +46,7 @@ class StaffMoneyInventoryController extends Controller
         return null;
     }
 
-    public function index(Request $request): View|RedirectResponse
+    public function index(Request $request): View|RedirectResponse|JsonResponse
     {
         $user = $request->user();
 
@@ -40,7 +54,14 @@ class StaffMoneyInventoryController extends Controller
             return redirect()->route('profile.edit')->with('status', 'Please Clock Out to access Money Inventory.');
         }
 
-        $date = Carbon::today()->toDateString();
+        $date = $this->resolveSelectedDate($request);
+
+        $dateDisplay = $date;
+        try {
+            $dateDisplay = Carbon::parse($date)->format('F j Y (l)');
+        } catch (\Throwable $e) {
+            $dateDisplay = $date;
+        }
 
         $existing = MoneyInventory::query()
             ->where('user_id', $user->id)
@@ -55,33 +76,91 @@ class StaffMoneyInventoryController extends Controller
             ->mapWithKeys(fn (int $d) => [$d => (int) $qtyByDenom->get($d, 0)])
             ->all();
 
-        $todaysTotalSales = (float) Order::query()
+        $reconciliationRow = DB::table('daily_sales_reconciliations')
+            ->where('user_id', $user->id)
+            ->where('date', $date)
+            ->first(['reconciled_at', 'total_sales']);
+
+        $hasReconciliation = $reconciliationRow !== null;
+        $reconciledAt = null;
+        if ($reconciliationRow && $reconciliationRow->reconciled_at) {
+            try {
+                $reconciledAt = Carbon::parse($reconciliationRow->reconciled_at);
+            } catch (\Throwable $e) {
+                $reconciledAt = null;
+            }
+        }
+
+        $basePaidOrders = Order::query()
+            ->where('created_by', $user->id)
+            ->where('status', 'paid')
+            ->whereDate('created_at', $date);
+
+        if ($reconciledAt) {
+            $basePaidOrders->where('created_at', '>', $reconciledAt);
+        }
+
+        $todaysTotalSales = (float) (clone $basePaidOrders)->sum('total_amount');
+
+        $todaysCashSales = (float) (clone $basePaidOrders)
+            ->where('payment_type', 'cash')
+            ->sum('total_amount');
+
+        $todaysGcashSales = (float) (clone $basePaidOrders)
+            ->where('payment_type', 'gcash')
+            ->sum('total_amount');
+
+        $reconciledToday = $hasReconciliation && ($todaysTotalSales <= 0);
+
+        $reconciledAtIso = $reconciledAt ? $reconciledAt->toIso8601String() : null;
+
+        $allDayTotalSales = (float) Order::query()
             ->where('created_by', $user->id)
             ->where('status', 'paid')
             ->whereDate('created_at', $date)
-            ->whereNotExists(function ($query) use ($user, $date) {
-                $query->select(DB::raw(1))
-                    ->from('daily_sales_reconciliations')
-                    ->whereColumn('daily_sales_reconciliations.user_id', 'orders.created_by')
-                    ->where('daily_sales_reconciliations.date', $date);
-            })
             ->sum('total_amount');
+
+        $lowerTodaysTotalSales = $allDayTotalSales;
+
+        $paymentEntries = PaymentEntry::query()
+            ->where('user_id', $user->id)
+            ->whereDate('date', $date)
+            ->with(['items' => function ($q) {
+                $q->orderByDesc('denomination');
+            }])
+            ->latest()
+            ->get(['id', 'user_id', 'date', 'payment_type', 'received_amount', 'created_at']);
+
+        if ($request->expectsJson()) {
+            return response()->json([
+                'date' => $date,
+                'date_display' => $dateDisplay,
+                'reconciled_at' => $reconciledAtIso,
+                'summary' => [
+                    'total_sales' => $todaysTotalSales,
+                    'cash' => $todaysCashSales,
+                    'gcash' => $todaysGcashSales,
+                    'lower_total_sales' => $lowerTodaysTotalSales,
+                ],
+                'reconciled' => $reconciledToday,
+                'payment_entries_count' => $paymentEntries->count(),
+            ]);
+        }
 
         return view('staff.money-inventory', [
             'date' => $date,
+            'dateDisplay' => $dateDisplay,
             'denominations' => self::DENOMINATIONS,
             'quantities' => $quantities,
             'todaysTotalSales' => $todaysTotalSales,
+            'todaysCashSales' => $todaysCashSales,
+            'todaysGcashSales' => $todaysGcashSales,
+            'lowerTodaysTotalSales' => $lowerTodaysTotalSales,
+            'reconciledToday' => $reconciledToday,
+            'reconciledAt' => $reconciledAtIso,
             'clockedIn' => (bool) ($user->clocked_in ?? false),
             'paymentDenominations' => self::PAYMENT_DENOMINATIONS,
-            'paymentEntries' => PaymentEntry::query()
-                ->where('user_id', $user->id)
-                ->whereDate('date', $date)
-                ->with(['items' => function ($q) {
-                    $q->orderByDesc('denomination');
-                }])
-                ->latest()
-                ->get(['id', 'user_id', 'date', 'payment_type', 'received_amount', 'created_at']),
+            'paymentEntries' => $paymentEntries,
         ]);
     }
 
@@ -100,7 +179,18 @@ class StaffMoneyInventoryController extends Controller
             return redirect()->route('profile.edit')->with('status', 'Please Clock Out to access Money Inventory.');
         }
 
-        $date = Carbon::today()->toDateString();
+        $date = null;
+        $rawDate = $request->input('date');
+        if (is_string($rawDate) && trim($rawDate) !== '') {
+            try {
+                $date = Carbon::parse($rawDate)->toDateString();
+            } catch (\Throwable $e) {
+                $date = null;
+            }
+        }
+        if (!$date) {
+            $date = $this->resolveSelectedDate($request);
+        }
 
         $validated = $request->validate([
             'quantities' => ['required', 'array'],
@@ -133,7 +223,7 @@ class StaffMoneyInventoryController extends Controller
             ]);
         }
 
-        return redirect()->route('staff.money-inventory.index')->with('status', 'Money inventory saved.');
+        return redirect()->route('staff.money-inventory.index', ['date' => $date])->with('status', 'Money inventory saved.');
     }
 
     public function storePaymentEntry(Request $request): JsonResponse
@@ -144,7 +234,18 @@ class StaffMoneyInventoryController extends Controller
         }
 
         $user = $request->user();
-        $date = Carbon::today()->toDateString();
+        $date = null;
+        $rawDate = $request->input('date');
+        if (is_string($rawDate) && trim($rawDate) !== '') {
+            try {
+                $date = Carbon::parse($rawDate)->toDateString();
+            } catch (\Throwable $e) {
+                $date = null;
+            }
+        }
+        if (!$date) {
+            $date = $this->resolveSelectedDate($request);
+        }
 
         $validated = $request->validate([
             'payment_type' => ['required', 'string', 'in:cash,gcash'],
@@ -188,6 +289,41 @@ class StaffMoneyInventoryController extends Controller
                 'message' => 'Received amount is required.',
                 'errors' => [
                     'received_amount' => ['Received amount is required.'],
+                ],
+            ], 422);
+        }
+
+        $reconciledAt = null;
+        $reconciliationRow = DB::table('daily_sales_reconciliations')
+            ->where('user_id', $user->id)
+            ->where('date', $date)
+            ->first(['reconciled_at']);
+        if ($reconciliationRow && $reconciliationRow->reconciled_at) {
+            try {
+                $reconciledAt = Carbon::parse($reconciliationRow->reconciled_at);
+            } catch (\Throwable $e) {
+                $reconciledAt = null;
+            }
+        }
+
+        $basePaidOrders = Order::query()
+            ->where('created_by', $user->id)
+            ->where('status', 'paid')
+            ->whereDate('created_at', $date);
+
+        if ($reconciledAt) {
+            $basePaidOrders->where('created_at', '>', $reconciledAt);
+        }
+
+        $expected = (int) round((float) (clone $basePaidOrders)
+            ->where('payment_type', $paymentType)
+            ->sum('total_amount'));
+
+        if ((int) $receivedAmount !== (int) $expected) {
+            return response()->json([
+                'message' => 'Received amount does not match today\'s total for this payment type.',
+                'errors' => [
+                    'received_amount' => ["Received amount must match today's total ({$expected})."],
                 ],
             ], 422);
         }
@@ -336,6 +472,8 @@ class StaffMoneyInventoryController extends Controller
         $user = $request->user();
         $today = Carbon::today()->toDateString();
 
+        $reconciledAt = now();
+
         // Option 1: Mark orders as 'reconciled' or add a flag so they are excluded from todaysTotalSales
         // For now, we'll create a simple reconciliation record to prevent double-counting
         DB::table('daily_sales_reconciliations')->updateOrInsert(
@@ -344,17 +482,53 @@ class StaffMoneyInventoryController extends Controller
                 'date' => $today,
             ],
             [
-                'reconciled_at' => now(),
+                'reconciled_at' => $reconciledAt,
                 'total_sales' => Order::query()
                     ->where('created_by', $user->id)
                     ->where('status', 'paid')
                     ->whereDate('created_at', $today)
+                    ->where('created_at', '<=', $reconciledAt)
                     ->sum('total_amount'),
             ]
         );
 
         return response()->json([
             'message' => 'Today\'s sales reconciled.',
+            'reconciled_at' => $reconciledAt?->toIso8601String(),
+        ]);
+    }
+
+    public function undoTodaysSalesReconciliation(Request $request): JsonResponse
+    {
+        $blocked = $this->ensureClockedOut($request);
+        if ($blocked) {
+            return $blocked;
+        }
+
+        $user = $request->user();
+        $today = Carbon::today()->toDateString();
+
+        DB::table('daily_sales_reconciliations')
+            ->where('user_id', $user->id)
+            ->where('date', $today)
+            ->delete();
+
+        $basePaidOrders = Order::query()
+            ->where('created_by', $user->id)
+            ->where('status', 'paid')
+            ->whereDate('created_at', $today);
+
+        $todaysTotalSales = (float) (clone $basePaidOrders)->sum('total_amount');
+        $todaysCashSales = (float) (clone $basePaidOrders)->where('payment_type', 'cash')->sum('total_amount');
+        $todaysGcashSales = (float) (clone $basePaidOrders)->where('payment_type', 'gcash')->sum('total_amount');
+
+        return response()->json([
+            'message' => 'Today\'s reconciliation undone.',
+            'totals' => [
+                'overall' => $todaysTotalSales,
+                'cash' => $todaysCashSales,
+                'gcash' => $todaysGcashSales,
+            ],
         ]);
     }
 

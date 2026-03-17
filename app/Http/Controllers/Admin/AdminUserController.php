@@ -6,6 +6,7 @@ use App\Http\Controllers\Controller;
 use App\Models\User;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
+use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\Hash;
 use Illuminate\Support\Facades\Validator;
 use Illuminate\Validation\Rules;
@@ -13,6 +14,20 @@ use Illuminate\View\View;
 
 class AdminUserController extends Controller
 {
+    private function isPrimaryAdmin(User $user): bool
+    {
+        $primaryAdminId = User::query()
+            ->where('role', 'admin')
+            ->orderBy('id')
+            ->value('id');
+
+        if (! $primaryAdminId) {
+            return false;
+        }
+
+        return (int) $primaryAdminId === (int) $user->id;
+    }
+
     public function index(): View
     {
         return view('admin.users.index', [
@@ -55,6 +70,7 @@ class AdminUserController extends Controller
     {
         return view('admin.users.edit', [
             'user' => $user,
+            'isPrimaryAdmin' => $this->isPrimaryAdmin($user),
         ]);
     }
 
@@ -76,6 +92,14 @@ class AdminUserController extends Controller
 
         $validated = $validator->validated();
 
+        if ($this->isPrimaryAdmin($user) && isset($validated['role']) && $validated['role'] !== $user->role) {
+            return back()
+                ->withErrors([
+                    'role' => 'The primary admin role cannot be changed.',
+                ])
+                ->withInput();
+        }
+
         $user->name = $validated['name'];
         $user->email = $validated['email'];
         $user->role = $validated['role'];
@@ -86,6 +110,18 @@ class AdminUserController extends Controller
 
         $user->save();
 
+        if ($request->user() && (int) $request->user()->id === (int) $user->id) {
+            $request->session()->put('auth_role', (string) ($user->role ?? ''));
+        }
+
+        if ($request->user() && (int) $request->user()->id === (int) $user->id && isset($validated['password']) && is_string($validated['password']) && $validated['password'] !== '') {
+            $request->session()->put('auth_password_hash', (string) ($user->password ?? ''));
+            Auth::guard('web')->logout();
+            $request->session()->invalidate();
+            $request->session()->regenerateToken();
+            return redirect()->route('login')->with('status', 'password-updated');
+        }
+
         return redirect()->route('admin.users.index')->with('status', 'User updated.');
     }
 
@@ -94,6 +130,12 @@ class AdminUserController extends Controller
         if ($request->user()->id === $user->id) {
             return back()->withErrors([
                 'user' => 'You cannot delete your own account.',
+            ]);
+        }
+
+        if (strtolower((string) ($user->role ?? '')) === 'admin') {
+            return back()->withErrors([
+                'user' => 'Admin accounts cannot be deleted.',
             ]);
         }
 
