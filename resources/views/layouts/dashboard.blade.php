@@ -97,6 +97,11 @@
                                         <span class="font-medium" x-show="!(isDesktop && sidebarCollapsed)">Reports</span>
                                     </a>
 
+                                    <a href="{{ $isAdmin ? route('admin.inventory.index') : route('staff.inventory.index') }}" class="group flex items-center gap-3 rounded-xl px-4 py-3 text-sm {{ request()->routeIs('admin.inventory.*') || request()->routeIs('staff.inventory.*') ? 'bg-white/10 text-white' : 'text-white/70 hover:bg-white/5 hover:text-white' }}" :title="(isDesktop && sidebarCollapsed) ? 'Inventory' : ''">
+                                        <span class="grid h-9 w-9 place-items-center rounded-xl border border-white/10 bg-white/5 text-white/80 group-hover:bg-white/10">I</span>
+                                        <span class="font-medium" x-show="!(isDesktop && sidebarCollapsed)">Inventory</span>
+                                    </a>
+
                                     @if ($isAdmin)
                                         <a href="{{ route('admin.users.index') }}" class="group flex items-center gap-3 rounded-xl px-4 py-3 text-sm {{ request()->routeIs('admin.users.*') ? 'bg-white/10 text-white' : 'text-white/70 hover:bg-white/5 hover:text-white' }}" :title="(isDesktop && sidebarCollapsed) ? 'Manage Users' : ''">
                                             <span class="grid h-9 w-9 place-items-center rounded-xl border border-white/10 bg-white/5 text-white/80 group-hover:bg-white/10">U</span>

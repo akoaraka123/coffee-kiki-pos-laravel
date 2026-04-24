@@ -3,12 +3,14 @@
 use App\Http\Controllers\ProfileController;
 use App\Http\Controllers\AdminDashboardController;
 use App\Http\Controllers\StaffDashboardController;
+use App\Http\Controllers\StaffInventoryController;
 use App\Http\Controllers\StaffMoneyInventoryController;
 use App\Http\Controllers\Admin\AdminUserController;
 use App\Http\Controllers\Admin\AdminOrderController;
 use App\Http\Controllers\Admin\AdminProductController;
 use App\Http\Controllers\Admin\AdminCategoryController;
 use App\Http\Controllers\Admin\AdminMoneyInventoryController;
+use App\Http\Controllers\Admin\AdminInventoryController;
 use App\Http\Controllers\OrderController;
 use Illuminate\Support\Facades\Route;
 
@@ -61,6 +63,12 @@ Route::prefix('admin')
         Route::delete('/users/{user}', [AdminUserController::class, 'destroy'])->name('users.destroy');
 
         Route::get('/money-inventory', [AdminMoneyInventoryController::class, 'index'])->name('money-inventory.index');
+
+        Route::get('/inventory', [AdminInventoryController::class, 'index'])->name('inventory.index');
+        Route::get('/inventory/history', [AdminInventoryController::class, 'history'])->name('inventory.history');
+        Route::post('/inventory/add-stock', [AdminInventoryController::class, 'addStock'])->name('inventory.add-stock');
+        Route::post('/inventory/delete-stock', [AdminInventoryController::class, 'deleteStock'])->name('inventory.delete-stock');
+        Route::post('/inventory/initialize', [AdminInventoryController::class, 'initializeInventory'])->name('inventory.initialize');
     });
 
 Route::prefix('staff')
@@ -76,6 +84,10 @@ Route::prefix('staff')
         Route::delete('/money-inventory/payment-entry/{entry}', [StaffMoneyInventoryController::class, 'deletePaymentEntry'])->name('money-inventory.payment-entries.destroy');
         Route::post('/money-inventory/reset-todays-sales', [StaffMoneyInventoryController::class, 'resetTodaysSales'])->name('money-inventory.reset-todays-sales');
         Route::post('/money-inventory/undo-reconcile', [StaffMoneyInventoryController::class, 'undoTodaysSalesReconciliation'])->name('money-inventory.undo-reconcile');
+
+        Route::get('/inventory', [StaffInventoryController::class, 'index'])->name('inventory.index');
+        Route::post('/inventory/delete-stock', [StaffInventoryController::class, 'deleteStock'])->name('inventory.delete-stock');
+        Route::post('/inventory/add-stock', [StaffInventoryController::class, 'addStock'])->name('inventory.add-stock');
     });
 
 Route::middleware(['auth', 'verified', 'password.current', 'role:staff'])

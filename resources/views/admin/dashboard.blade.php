@@ -43,6 +43,24 @@
             </div>
         </div>
 
+        <div class="grid grid-cols-1 gap-4 sm:grid-cols-3">
+            <div class="rounded-xl border border-white/10 bg-white/5 p-5 shadow-sm">
+                <div class="text-xs text-white/50">Total Inventory Items</div>
+                <div class="mt-2 text-2xl font-semibold">{{ \App\Models\Inventory::count() }}</div>
+                <div class="mt-1 text-xs text-white/35">All products and variants</div>
+            </div>
+            <div class="rounded-xl border border-amber-500/25 bg-amber-500/10 p-5 shadow-sm">
+                <div class="text-xs text-amber-200">Low Stock Items</div>
+                <div class="mt-2 text-2xl font-semibold">{{ \App\Models\Inventory::whereColumn('stock_quantity', '<=', 'low_stock_threshold')->where('stock_quantity', '>', 0)->count() }}</div>
+                <div class="mt-1 text-xs text-amber-200/70">10 or less in stock</div>
+            </div>
+            <div class="rounded-xl border border-rose-500/25 bg-rose-500/10 p-5 shadow-sm">
+                <div class="text-xs text-rose-200">Out of Stock</div>
+                <div class="mt-2 text-2xl font-semibold">{{ \App\Models\Inventory::where('stock_quantity', 0)->count() }}</div>
+                <div class="mt-1 text-xs text-rose-200/70">No stock available</div>
+            </div>
+        </div>
+
         <div class="grid grid-cols-1 gap-4 lg:grid-cols-3">
             <div class="rounded-xl border border-white/10 bg-white/5 p-5 shadow-sm lg:col-span-2">
                 <div class="flex items-center justify-between">

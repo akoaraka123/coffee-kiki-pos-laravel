@@ -15,11 +15,17 @@
             <span class="font-medium" x-show="!sidebarCollapsed" x-text="cat.label"></span>
         </button>
     </template>
+
+    <a href="{{ route('staff.inventory.index') }}" class="group flex w-full items-center gap-3 rounded-xl px-4 py-3 text-sm {{ request()->routeIs('staff.inventory.*') ? 'bg-white/10 text-white' : 'text-white/70 hover:bg-white/5 hover:text-white' }}" :title="sidebarCollapsed ? 'Inventory' : ''">
+        <span class="grid h-9 w-9 place-items-center rounded-xl border border-white/10 bg-white/5 text-white/80 group-hover:bg-white/10">I</span>
+        <span class="font-medium" x-show="!sidebarCollapsed">Inventory</span>
+    </a>
 @endsection
 
 @section('x-data')
     x-data="posOrder('{{ auth()->user()->pos_layout === 'left' ? 'left' : 'right' }}')"
     data-products='@json($products)'
+    data-inventory='@json($inventoryMap)'
     data-initial-layout="{{ auth()->user()->pos_layout === 'left' ? 'left' : 'right' }}"
     data-clocked-in="{{ auth()->user()->clocked_in ? '1' : '0' }}"
 @endsection
@@ -62,7 +68,7 @@
                 </div>
             </div>
 
-            <div class="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3">
+            <div class="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-3">
                 <template x-for="product in groupedProducts()" :key="product.name">
                     <div
                         class="group rounded-2xl border border-white/10 bg-white/5 shadow-lg hover:bg-white/10 transition p-5 flex flex-col h-full"
@@ -72,21 +78,21 @@
                         x-on:click="openProductModal(product)"
                         :class="focusedProductName && focusedProductName === product.name ? 'ring-2 ring-white/20' : ''"
                     >
-                        <h3 class="text-xl font-semibold tracking-wide text-white mb-2" x-text="product.name"></h3>
+                        <h3 class="text-xl font-semibold tracking-wide text-white mb-3 leading-tight" x-text="product.name"></h3>
 
-                        <div class="flex items-start justify-center pt-2">
+                        <div class="flex items-start justify-center py-3">
                             <img
                                 :src="productImageSrc(product)"
                                 :alt="product.name"
                                 x-on:error="if (!$el.dataset.fallbackTried) { $el.dataset.fallbackTried = '1'; $el.src = (window.__assetBaseUrl || '/') + 'images/coffee-doodle.png'; }"
-                                class="max-h-60 w-auto object-contain drop-shadow-xl"
+                                class="max-h-48 sm:max-h-52 w-auto object-contain drop-shadow-xl"
                                 x-on:click.stop="openProductModal(product)"
                                 loading="lazy"
                                 style="image-rendering: -webkit-optimize-contrast;"
                             />
                         </div>
 
-                        <div class="mt-3 space-y-2">
+                        <div class="mt-4 space-y-3 flex-1">
                             <template
                                 x-if="Array.isArray(product.sizes) && product.sizes.length > 0"
                             >
@@ -94,14 +100,31 @@
                                     x-for="(size, idx) in product.sizes"
                                     :key="String(size.id || '') + '-' + idx"
                                 >
-                                <button
-                                    type="button"
-                                    class="w-full flex items-center justify-between px-4 py-3 rounded-xl bg-black/40 border border-white/10 hover:bg-black/60 transition text-white text-lg font-medium"
-                                    x-on:click.stop="add(product.name, size)"
-                                >
-                                    <span x-text="size.size || 'Regular'"></span>
-                                    <span>₱<span x-text="formatPrice(size.price)"></span></span>
-                                </button>
+                                <div class="relative">
+                                    <button
+                                        type="button"
+                                        class="w-full flex items-start justify-between gap-3 px-4 py-3 rounded-xl bg-black/40 border border-white/10 transition text-left"
+                                        :class="getStockStatus(size.id) === 'out_of_stock' ? 'opacity-50 cursor-not-allowed' : 'hover:bg-black/60'"
+                                        :disabled="getStockStatus(size.id) === 'out_of_stock'"
+                                        x-on:click.stop="getStockStatus(size.id) !== 'out_of_stock' && add(product.name, size)"
+                                    >
+                                        <div class="flex-1 min-w-0">
+                                            <div class="text-white font-medium text-base sm:text-lg" x-text="size.size || 'Regular'"></div>
+                                            <div class="text-xs text-white/60 mt-1" x-text="'Stock: ' + (getStockQuantity(size.id) === '-' ? '0' : getStockQuantity(size.id))"></div>
+                                        </div>
+                                        <div class="flex flex-col items-end gap-1 min-w-fit">
+                                            <div class="text-white font-semibold text-base sm:text-lg">₱<span x-text="formatPrice(size.price)"></span></div>
+                                            <div class="text-[10px] sm:text-xs font-semibold px-2 py-0.5 rounded-full"
+                                                :class="{
+                                                    'bg-emerald-500/20 text-emerald-300 border border-emerald-500/30': getStockStatus(size.id) === 'in_stock',
+                                                    'bg-amber-500/20 text-amber-300 border border-amber-500/30': getStockStatus(size.id) === 'low_stock',
+                                                    'bg-rose-500/20 text-rose-300 border border-rose-500/30': getStockStatus(size.id) === 'out_of_stock'
+                                                }"
+                                                x-text="getStockStatus(size.id) === 'out_of_stock' ? 'Out of Stock' : (getStockStatus(size.id) === 'low_stock' ? 'Low Stock' : 'In Stock')"
+                                            ></div>
+                                        </div>
+                                    </button>
+                                </div>
                                 </template>
                             </template>
                         </div>
@@ -114,32 +137,39 @@
             class="sticky top-6 self-start h-[calc(100vh-160px)]"
             :class="layoutPosition === 'left' ? 'lg:order-1' : 'lg:order-2'"
         >
-            <div class="rounded-xl border border-white/10 bg-white/5 p-5 shadow-sm flex flex-col h-full min-h-0">
-            <div class="text-sm font-semibold">Current Order</div>
+            <div class="rounded-xl border border-white/10 bg-white/5 p-4 shadow-sm flex flex-col h-full min-h-0">
+            <div class="flex items-center justify-between">
+                <div class="text-sm font-semibold">Current Order</div>
+                <template x-if="cart.length > 0">
+                    <div class="rounded-full bg-white/10 px-2.5 py-0.5 text-xs font-medium text-white/80" x-text="cart.length + ' items'"></div>
+                </template>
+            </div>
 
-            <div class="mt-4 flex-1 min-h-0 overflow-y-auto pr-1">
+            <div class="mt-3 flex-1 min-h-0 overflow-y-auto pr-1" style="max-height: calc(100vh - 400px);">
                 <template x-if="cart.length === 0">
-                    <div class="grid place-items-center rounded-xl border border-white/10 bg-white/5 px-6 py-16 text-center">
-                        <div class="text-4xl">📦</div>
-                        <div class="mt-3 text-sm text-white/60">No items in order</div>
+                    <div class="grid place-items-center rounded-xl border border-white/10 bg-white/5 px-6 py-12 text-center">
+                        <div class="text-3xl">📦</div>
+                        <div class="mt-2 text-xs text-white/60">No items in order</div>
                     </div>
                 </template>
 
                 <template x-if="cart.length > 0">
-                    <div class="space-y-3">
+                    <div class="space-y-2">
                         <template x-for="item in cart" :key="item.product_id">
-                            <div class="flex items-center justify-between gap-3 rounded-xl border border-white/10 bg-[#111] px-4 py-3">
-                                <div class="min-w-0">
-                                    <div class="truncate text-sm font-semibold" x-text="item.name"></div>
+                            <div class="flex items-center justify-between gap-2 rounded-xl border border-white/10 bg-[#111] px-3 py-2.5">
+                                <div class="min-w-0 flex-1">
+                                    <div class="truncate text-sm font-semibold text-white" x-text="item.name"></div>
                                     <div class="mt-0.5 text-xs text-white/50" x-text="item.size || 'Regular'"></div>
-                                    <div class="mt-0.5 text-xs text-white/50">₱<span x-text="formatPrice(item.price)"></span> each</div>
-                                    <div class="mt-0.5 text-xs font-semibold text-white/80">Subtotal: ₱<span x-text="formatPrice(item.price * item.quantity)"></span></div>
+                                    <div class="mt-0.5 flex items-center gap-2">
+                                        <span class="text-xs text-white/50">₱<span x-text="formatPrice(item.price)"></span> each</span>
+                                        <span class="text-xs font-semibold text-white/70">Subtotal: ₱<span x-text="formatPrice(item.price * item.quantity)"></span></span>
+                                    </div>
                                 </div>
 
-                                <div class="flex items-center gap-2">
-                                    <button type="button" class="grid h-9 w-9 place-items-center rounded-xl border border-white/10 bg-white/5 hover:bg-white/10" x-on:click="decrement(item.product_id, item.size)">-</button>
-                                    <div class="w-8 text-center text-sm font-semibold" x-text="item.quantity"></div>
-                                    <button type="button" class="grid h-9 w-9 place-items-center rounded-xl border border-white/10 bg-white/5 hover:bg-white/10" x-on:click="increment(item.product_id, item.size)">+</button>
+                                <div class="flex items-center gap-1.5 flex-shrink-0">
+                                    <button type="button" class="grid h-8 w-8 place-items-center rounded-lg border border-white/10 bg-white/5 hover:bg-white/10 text-sm" x-on:click="decrement(item.product_id, item.size)">-</button>
+                                    <div class="w-7 text-center text-sm font-semibold text-white" x-text="item.quantity"></div>
+                                    <button type="button" class="grid h-8 w-8 place-items-center rounded-lg border border-white/10 bg-white/5 hover:bg-white/10 text-sm" x-on:click="increment(item.product_id, item.size)">+</button>
                                 </div>
                             </div>
                         </template>
@@ -147,14 +177,14 @@
                 </template>
             </div>
 
-            <div class="mt-4 border-t border-white/10 pt-5">
+            <div class="mt-3 border-t border-white/10 pt-3">
                 <div class="flex items-center justify-between">
-                    <div class="text-xs font-semibold uppercase tracking-wide text-white/50">Total</div>
-                    <div class="text-2xl font-bold tracking-wide text-white">₱<span x-text="formatPrice(total())"></span></div>
+                    <div class="text-xs font-semibold text-white/50">Items: <span x-text="cart.reduce((sum, i) => sum + i.quantity, 0)"></span></div>
+                    <div class="text-xl font-bold text-white">₱<span x-text="formatPrice(total())"></span></div>
                 </div>
             </div>
 
-            <form id="pos-checkout-form" method="POST" action="{{ route('orders.store') }}" class="mt-5 space-y-3" x-on:submit.prevent="startCheckout()">
+            <form id="pos-checkout-form" method="POST" action="{{ route('orders.store') }}" class="mt-3 space-y-2.5" x-on:submit.prevent="startCheckout()">
                 @csrf
                 <input type="hidden" name="status" value="paid" />
                 <input type="hidden" name="items" x-bind:value="JSON.stringify(payloadItems())" />
@@ -163,21 +193,12 @@
                 <input type="hidden" name="cash_received" x-bind:value="paymentType === 'cash' ? cashReceived : ''" />
                 <input type="hidden" name="gcash_reference" x-bind:value="paymentType === 'gcash' ? gcashReference : ''" />
 
-                <input
-                    type="text"
-                    name="customer_name"
-                    placeholder="Customer name (optional)"
-                    class="w-full rounded-xl border border-white/10 bg-[#111] px-4 py-3 text-sm text-white placeholder:text-white/30 focus:outline-none focus:ring-2 focus:ring-white/20"
-                    x-model="customerName"
-                    value="{{ old('customer_name') }}"
-                />
-
-                <div class="space-y-2">
+                <div class="space-y-1.5">
                     <label class="text-xs font-semibold text-white/60">Payment Type</label>
                     <div class="grid grid-cols-2 gap-2">
                         <button
                             type="button"
-                            class="rounded-xl border px-4 py-3 text-sm font-semibold transition"
+                            class="rounded-xl border px-3 py-2.5 text-sm font-semibold transition"
                             x-on:click="paymentType = 'cash'"
                             x-bind:class="paymentType === 'cash' ? 'border-emerald-400/30 bg-emerald-500 text-white shadow-sm' : 'border-white/10 bg-[#111] text-white/80 hover:bg-white/5'"
                         >
@@ -185,9 +206,9 @@
                         </button>
                         <button
                             type="button"
-                            class="rounded-xl border px-4 py-3 text-sm font-semibold transition"
+                            class="rounded-xl border px-3 py-2.5 text-sm font-semibold transition"
                             x-on:click="paymentType = 'gcash'"
-                            x-bind:class="paymentType === 'gcash' ? 'border-sky-400/30 bg-sky-500 text-white shadow-sm' : 'border-white/10 bg-[#111] text-white/80 hover:bg-white/5'"
+                            x-bind:class="paymentType === 'gcash' ? 'border-blue-400/30 bg-[#007bff] text-white shadow-sm' : 'border-white/10 bg-[#111] text-white/80 hover:bg-white/5'"
                         >
                             GCash
                         </button>
@@ -195,7 +216,7 @@
                 </div>
 
                 <template x-if="paymentType === 'cash'">
-                    <div class="space-y-2" x-cloak>
+                    <div class="space-y-1.5" x-cloak>
                         <label class="text-xs font-semibold text-white/60">Cash Received</label>
                         <input
                             type="number"
@@ -203,27 +224,27 @@
                             step="0.01"
                             min="0"
                             placeholder="Enter cash amount"
-                            class="w-full rounded-xl border border-white/10 bg-[#111] px-4 py-3 text-sm text-white placeholder:text-white/30 focus:outline-none focus:ring-2 focus:ring-white/20"
+                            class="w-full rounded-xl border border-white/10 bg-[#111] px-3 py-2.5 text-sm text-white placeholder:text-white/30 focus:outline-none focus:ring-2 focus:ring-white/20"
                             x-model="cashReceived"
                         />
 
-                        <div class="rounded-xl border border-white/10 bg-white/5 px-4 py-3 text-sm" x-show="cashReceived !== ''">
+                        <div class="rounded-xl border border-white/10 bg-white/5 px-3 py-2 text-sm" x-show="cashReceived !== ''">
                             <div class="flex items-center justify-between text-white/70">
                                 <span>Change</span>
                                 <span class="font-semibold text-white">₱<span x-text="formatPrice(changeAmount())"></span></span>
                             </div>
-                            <div class="mt-1 text-xs text-white/40" x-show="Number(cashReceived || 0) < Number(total() || 0)">Insufficient payment amount.</div>
+                            <div class="mt-0.5 text-xs text-white/40" x-show="Number(cashReceived || 0) < Number(total() || 0)">Insufficient payment amount.</div>
                         </div>
                     </div>
                 </template>
 
                 <template x-if="paymentType === 'gcash'">
-                    <div class="space-y-2" x-cloak>
+                    <div class="space-y-1.5" x-cloak>
                         <label class="text-xs font-semibold text-white/60">GCash Reference No. (optional)</label>
                         <input
                             type="text"
                             placeholder="Enter GCash reference number"
-                            class="w-full rounded-xl border border-white/10 bg-[#111] px-4 py-3 text-sm text-white placeholder:text-white/30 focus:outline-none focus:ring-2 focus:ring-white/20"
+                            class="w-full rounded-xl border border-white/10 bg-[#111] px-3 py-2.5 text-sm text-white placeholder:text-white/30 focus:outline-none focus:ring-2 focus:ring-white/20"
                             x-model="gcashReference"
                         />
                     </div>
@@ -231,7 +252,7 @@
 
                 <button
                     type="button"
-                    class="w-full rounded-full bg-orange-500 px-4 py-3 text-sm font-bold text-white shadow-lg hover:bg-orange-600 active:bg-orange-700"
+                    class="w-full rounded-full bg-orange-500 px-4 py-2.5 text-sm font-bold text-white shadow-lg hover:bg-orange-600 active:bg-orange-700"
                     x-bind:disabled="cart.length === 0 || isSubmitting"
                     x-bind:class="(cart.length === 0 || isSubmitting) ? 'opacity-50 cursor-not-allowed' : ''"
                     x-on:click="startCheckout()"
@@ -241,17 +262,15 @@
 
                 <button
                     type="button"
-                    class="w-full rounded-full border border-white/10 bg-white/5 px-4 py-3 text-sm font-semibold text-red-400 hover:bg-white/10 hover:text-red-300"
+                    class="w-full rounded-xl border border-white/10 bg-white/5 px-4 py-2 text-sm font-semibold text-white/80 hover:bg-white/10"
                     x-on:click="clear()"
-                    x-bind:disabled="cart.length === 0"
                 >
                     Clear Order
                 </button>
             </form>
-                </div>
-            </div>
         </div>
-    </template>
+    </div>
+</div>
 
     <div class="fixed bottom-6 left-1/2 z-50 -translate-x-1/2" x-show="toastOpen" x-cloak x-transition.opacity>
         <div class="rounded-xl border border-white/10 bg-[#111] px-4 py-3 text-sm font-semibold text-white shadow-2xl" x-text="toastMessage"></div>

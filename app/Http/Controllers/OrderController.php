@@ -2,6 +2,8 @@
 
 namespace App\Http\Controllers;
 
+use App\Models\Inventory;
+use App\Models\InventoryHistory;
 use App\Models\OrderActivity;
 use App\Models\Order;
 use App\Models\OrderItem;
@@ -153,8 +155,14 @@ class OrderController extends Controller
             ->orderBy('size')
             ->get(['id', 'name', 'price', 'category', 'size', 'image']);
 
+        $inventories = Inventory::query()
+            ->get(['product_id', 'stock_quantity', 'low_stock_threshold']);
+
+        $inventoryMap = $inventories->keyBy('product_id');
+
         return response()->view('orders.create', [
             'products' => $products,
+            'inventoryMap' => $inventoryMap,
         ]);
     }
 
@@ -211,10 +219,45 @@ class OrderController extends Controller
 
         $products = Product::query()
             ->whereIn('id', $productIds)
-            ->get(['id', 'name', 'price']);
+            ->get(['id', 'name', 'price', 'size']);
 
         $itemsToInsert = [];
         $total = 0;
+
+        // Validate stock availability
+        foreach ($items as $raw) {
+            $productId = isset($raw['product_id']) ? (int) $raw['product_id'] : 0;
+            $qty = isset($raw['quantity']) ? (int) $raw['quantity'] : 0;
+
+            if ($productId <= 0 || $qty <= 0) {
+                continue;
+            }
+
+            $product = $products->firstWhere('id', $productId);
+
+            if (! $product) {
+                continue;
+            }
+
+            $inventory = Inventory::where('product_id', $productId)->first();
+
+            if ($inventory && $inventory->stock_quantity < $qty) {
+                $size = $product->size ?? 'Regular';
+                $errorMessage = "Not enough stock for {$product->name} ({$size}). Available stock: {$inventory->stock_quantity}.";
+                if ($request->expectsJson()) {
+                    return response()->json([
+                        'message' => 'The given data was invalid.',
+                        'errors' => [
+                            'items' => [$errorMessage],
+                        ],
+                    ], 422);
+                }
+
+                return back()->withErrors([
+                    'items' => $errorMessage,
+                ])->withInput();
+            }
+        }
 
         foreach ($items as $raw) {
             $productId = isset($raw['product_id']) ? (int) $raw['product_id'] : 0;
@@ -321,6 +364,27 @@ class OrderController extends Controller
                     'quantity' => $row['quantity'],
                     'line_total' => $row['line_total'],
                 ]);
+
+                // Deduct stock
+                $inventory = Inventory::where('product_id', $row['product_id'])->first();
+                if ($inventory) {
+                    $inventory->stock_quantity -= $row['quantity'];
+                    $inventory->save();
+
+                    // Record inventory history
+                    $product = Product::find($row['product_id']);
+                    InventoryHistory::create([
+                        'inventory_id' => $inventory->id,
+                        'product_id' => $row['product_id'],
+                        'product_name' => $row['name'],
+                        'size' => $product ? $product->size : null,
+                        'action_type' => 'DEDUCT_STOCK',
+                        'quantity' => $row['quantity'],
+                        'user_id' => $request->user()->id,
+                        'user_name' => $request->user()->name,
+                        'order_id' => $order->id,
+                    ]);
+                }
             }
         });
 

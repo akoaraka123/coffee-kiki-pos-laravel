@@ -16,6 +16,10 @@ window.posOrder = function posOrder(initialLayout) {
         searchQuery: '',
         focusedProductName: '',
         products: [],
+        inventory: [],
+        init() {
+            console.log('Inventory data:', this.inventory);
+        },
         cart: [],
         paymentType: 'cash',
         cashReceived: '',
@@ -71,6 +75,21 @@ window.posOrder = function posOrder(initialLayout) {
                     this.products = [];
                 }
             }
+
+            if (!this.inventory || Object.keys(this.inventory).length === 0) {
+                if (this.$el?.dataset?.inventory) {
+                    try {
+                        const parsed = JSON.parse(this.$el.dataset.inventory);
+                        if (typeof parsed === 'object' && parsed !== null) {
+                            this.inventory = parsed;
+                        }
+                    } catch (e) {
+                        this.inventory = {};
+                    }
+                }
+            }
+
+            console.log('Inventory data:', this.inventory);
 
             const cats = this.categories();
             if (cats.length > 0 && !cats.some(c => c.key === this.activeTab)) {
@@ -235,8 +254,28 @@ window.posOrder = function posOrder(initialLayout) {
             const price = Number(sizeInfo.price);
             if (!Number.isFinite(price)) return;
 
+            // Check stock availability
+            const stock = this.getStockQuantity(sizeInfo.id);
+            const currentCartQuantity = this.cart
+                .filter(i => i.product_id === sizeInfo.id)
+                .reduce((sum, i) => sum + i.quantity, 0);
+
+            if (stock === 0 || stock === '-') {
+                this.showToast('This item is out of stock');
+                return;
+            }
+
+            if (currentCartQuantity >= stock) {
+                this.showToast(`Only ${stock} ${stock === 1 ? 'item' : 'items'} available in stock`);
+                return;
+            }
+
             const existing = this.cart.find(i => i.name === name && i.size === sizeLabel);
             if (existing) {
+                if (existing.quantity >= stock) {
+                    this.showToast(`Only ${stock} ${stock === 1 ? 'item' : 'items'} available in stock`);
+                    return;
+                }
                 existing.quantity += 1;
                 this.persistCart();
                 return;
@@ -255,6 +294,19 @@ window.posOrder = function posOrder(initialLayout) {
             if (!this.ensureClockedIn()) return;
             const item = this.cart.find(i => i.product_id === productId && i.size === size);
             if (!item) return;
+
+            // Check stock availability
+            const stock = this.getStockQuantity(productId);
+            if (stock === 0 || stock === '-') {
+                this.showToast('This item is out of stock');
+                return;
+            }
+
+            if (item.quantity >= stock) {
+                this.showToast(`Only ${stock} ${stock === 1 ? 'item' : 'items'} available in stock`);
+                return;
+            }
+
             item.quantity += 1;
             this.persistCart();
         },
@@ -322,6 +374,22 @@ window.posOrder = function posOrder(initialLayout) {
         formatPrice(value) {
             const n = Number(value || 0);
             return n.toFixed(2);
+        },
+        getStockStatus(productId) {
+            if (!productId || !this.inventory) return 'in_stock';
+            const inv = this.inventory[productId];
+            if (!inv || typeof inv !== 'object') return 'in_stock';
+            const stock = Number(inv.stock_quantity || 0);
+            const threshold = Number(inv.low_stock_threshold || 10);
+            if (stock === 0) return 'out_of_stock';
+            if (stock <= threshold) return 'low_stock';
+            return 'in_stock';
+        },
+        getStockQuantity(productId) {
+            if (!productId || !this.inventory) return '-';
+            const inv = this.inventory[productId];
+            if (!inv || typeof inv !== 'object') return '-';
+            return Number(inv.stock_quantity || 0);
         },
         changeAmount() {
             const total = Number(this.total() || 0);
