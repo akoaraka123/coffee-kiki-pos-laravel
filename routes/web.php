@@ -72,6 +72,7 @@ Route::prefix('admin')
         Route::post('/inventory/initialize', [AdminInventoryController::class, 'initializeInventory'])->name('inventory.initialize');
     });
 
+
 Route::prefix('staff')
     ->middleware(['auth', 'verified', 'password.current', 'role:staff'])
     ->name('staff.')

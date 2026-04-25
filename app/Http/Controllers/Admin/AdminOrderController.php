@@ -194,6 +194,53 @@ class AdminOrderController extends Controller
             $dateDisplay = $date;
         }
 
+        // Calculate cash and GCash sales totals
+        $paidOrders = $orders->where('status', 'paid');
+        $cashSalesTotal = (float) $paidOrders
+            ->where('payment_type', 'cash')
+            ->sum(fn (Order $o) => (float) ($o->total_amount ?? $o->total ?? 0));
+        $gcashSalesTotal = (float) $paidOrders
+            ->where('payment_type', 'gcash')
+            ->sum(fn (Order $o) => (float) ($o->total_amount ?? $o->total ?? 0));
+
+        // Fetch Money Inventory data for the staff and date
+        $moneyInventory = MoneyInventory::query()
+            ->where('user_id', $staff->id)
+            ->where('date', $date)
+            ->first();
+
+        $countedCashTotal = 0;
+        $denominationBreakdown = [];
+        if ($moneyInventory) {
+            $countedCashTotal = $moneyInventory->quantities ? collect($moneyInventory->quantities)->reduce(function ($sum, $qty, $denom) {
+                return $sum + ($denom * $qty);
+            }, 0) : 0;
+            $denominationBreakdown = $moneyInventory->quantities ?? [];
+        }
+
+        // Fetch payment entries for verification
+        $paymentEntries = PaymentEntry::query()
+            ->where('user_id', $staff->id)
+            ->where('date', $date)
+            ->with('items')
+            ->get();
+
+        $verifiedGcashTotal = (float) $paymentEntries
+            ->where('payment_type', 'gcash')
+            ->sum('received_amount');
+
+        $cashDifference = $countedCashTotal - $cashSalesTotal;
+        $gcashDifference = $verifiedGcashTotal - $gcashSalesTotal;
+        $totalDifference = $cashDifference + $gcashDifference;
+
+        if ($totalDifference == 0) {
+            $reconciliationStatus = 'balanced';
+        } elseif ($totalDifference < 0) {
+            $reconciliationStatus = 'short';
+        } else {
+            $reconciliationStatus = 'over';
+        }
+
         return view('admin.orders.details', [
             'date' => $date,
             'dateDisplay' => $dateDisplay,
@@ -202,6 +249,16 @@ class AdminOrderController extends Controller
             'totalOrders' => $totalOrders,
             'totalItems' => $totalItems,
             'totalSales' => $totalSales,
+            'cashSalesTotal' => $cashSalesTotal,
+            'gcashSalesTotal' => $gcashSalesTotal,
+            'countedCashTotal' => $countedCashTotal,
+            'verifiedGcashTotal' => $verifiedGcashTotal,
+            'denominationBreakdown' => $denominationBreakdown,
+            'paymentEntries' => $paymentEntries,
+            'cashDifference' => $cashDifference,
+            'gcashDifference' => $gcashDifference,
+            'totalDifference' => $totalDifference,
+            'reconciliationStatus' => $reconciliationStatus,
         ]);
     }
 
@@ -418,25 +475,56 @@ class AdminOrderController extends Controller
         $today = Carbon::today();
         $tomorrow = Carbon::tomorrow();
 
-        $query = Order::query()
-            ->where('created_at', '>=', $today)
-            ->where('created_at', '<', $tomorrow);
+        $deletedOrders = 0;
+        $deletedPaymentEntries = 0;
+        $deletedReconciliations = 0;
 
-        if ($staffId) {
-            $query->where('created_by', $staffId);
-        }
+        DB::transaction(function () use ($staffId, $today, $tomorrow, &$deletedOrders, &$deletedPaymentEntries, &$deletedReconciliations) {
+            // Delete orders for today
+            $orderQuery = Order::query()
+                ->where('created_at', '>=', $today)
+                ->where('created_at', '<', $tomorrow);
 
-        $orders = $query->get(['id']);
+            if ($staffId) {
+                $orderQuery->where('created_by', $staffId);
+            }
 
-        $deletedCount = 0;
-        foreach ($orders as $order) {
-            $order->delete();
-            $deletedCount++;
-        }
+            $orders = $orderQuery->get(['id']);
+            foreach ($orders as $order) {
+                $order->delete();
+                $deletedOrders++;
+            }
+
+            // Delete payment entries for today
+            $paymentEntryQuery = \App\Models\PaymentEntry::query()
+                ->whereDate('date', $today->toDateString());
+
+            if ($staffId) {
+                $paymentEntryQuery->where('user_id', $staffId);
+            }
+
+            $paymentEntries = $paymentEntryQuery->get(['id']);
+            foreach ($paymentEntries as $entry) {
+                $entry->delete();
+                $deletedPaymentEntries++;
+            }
+
+            // Delete daily sales reconciliation records for today
+            $reconciliationQuery = DB::table('daily_sales_reconciliations')
+                ->where('date', $today->toDateString());
+
+            if ($staffId) {
+                $reconciliationQuery->where('user_id', $staffId);
+            }
+
+            $deletedReconciliations = $reconciliationQuery->delete();
+        });
 
         return response()->json([
-            'message' => "Deleted {$deletedCount} orders from today.",
-            'deleted_count' => $deletedCount,
+            'message' => "Deleted {$deletedOrders} orders, {$deletedPaymentEntries} payment entries, and {$deletedReconciliations} reconciliation records from today.",
+            'deleted_orders' => $deletedOrders,
+            'deleted_payment_entries' => $deletedPaymentEntries,
+            'deleted_reconciliations' => $deletedReconciliations,
         ]);
     }
 }

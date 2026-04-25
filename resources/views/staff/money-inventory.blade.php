@@ -24,6 +24,7 @@
                 'payment_type' => (string) $e->payment_type,
                 'received_amount' => (int) $e->received_amount,
                 'created_at' => $e->created_at?->toIso8601String(),
+                'order_id' => (int) $e->order_id,
                 'items' => ($e->items ?? collect())->map(fn ($i) => [
                     'denomination' => (int) $i->denomination,
                     'quantity' => (int) $i->quantity,
@@ -34,16 +35,28 @@
             paymentDeleteUrlTemplate: @js(route('staff.money-inventory.payment-entries.destroy', ['entry' => '__ENTRY__'])),
             resetTodaysSalesUrl: @js(route('staff.money-inventory.reset-todays-sales')),
             undoReconcileUrl: @js(route('staff.money-inventory.undo-reconcile')),
+            gcashOrders: @js(($gcashOrders ?? collect())->map(fn ($o) => [
+                'id' => (int) $o->id,
+                'order_number' => (string) $o->order_number,
+                'total_amount' => (int) $o->total_amount,
+                'created_at' => $o->created_at?->toIso8601String(),
+                'gcash_reference' => (string) ($o->gcash_reference ?? ''),
+                'gcash_sender_name' => (string) ($o->gcash_sender_name ?? ''),
+                'gcash_sender_mobile' => (string) ($o->gcash_sender_mobile ?? ''),
+            ])->values()->all()),
+            confirmedOrderIds: @js($confirmedOrderIds ?? []),
         })"
         x-init="init()"
     >
-        <div class="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+        <!-- Page Header -->
+        <div class="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
             <div>
-                <h2 class="text-xl font-semibold" x-text="dateDisplay"></h2>
-                <p class="mt-1 text-sm text-white/50">Record your physical cash denominations for <span x-text="dateDisplay"></span>.</p>
+                <h2 class="text-2xl font-bold">Money Inventory</h2>
+                <p class="mt-1 text-sm text-white/50">Reconcile physical cash and GCash payments for today's sales.</p>
+                <p class="mt-1 text-xs text-white/40" x-text="formatDisplayDate(dateDisplay)"></p>
             </div>
 
-            <div class="flex flex-col gap-3 sm:flex-row sm:items-center">
+            <div class="flex flex-wrap items-center gap-3">
                 <input
                     type="date"
                     class="w-full rounded-xl border border-white/10 bg-white/5 px-4 py-2 text-sm font-medium text-white/80 shadow-sm hover:bg-white/10 sm:w-auto"
@@ -52,41 +65,24 @@
                 />
                 <button
                     type="button"
-                    class="inline-flex items-center justify-center rounded-xl bg-[#efe9df] px-4 py-2 text-sm font-semibold text-[#1c1c1c] shadow-sm hover:opacity-95 disabled:opacity-60"
-                    x-on:click="save()"
-                    x-bind:disabled="saving"
+                    class="inline-flex items-center justify-center rounded-xl border border-white/10 bg-white/5 px-4 py-2 text-sm font-medium text-white/80 shadow-sm hover:bg-white/10"
+                    x-on:click="refreshSalesData()"
                 >
-                    <span x-show="!saving">Save</span>
-                    <span x-show="saving" x-cloak>Saving...</span>
+                    Refresh Sales
                 </button>
                 <button
                     type="button"
-                    class="inline-flex items-center justify-center rounded-xl border border-white/10 bg-white/5 px-4 py-2 text-sm font-medium text-white/80 shadow-sm hover:bg-white/10"
-                    x-on:click="reset()"
+                    class="inline-flex items-center justify-center rounded-xl bg-[#efe9df] px-4 py-2 text-sm font-semibold text-[#1c1c1c] shadow-sm hover:opacity-95 disabled:opacity-60"
+                    x-on:click="savePaymentEntry()"
+                    x-bind:disabled="paymentSaving"
                 >
-                    Reset
+                    <span x-show="!paymentSaving">Save</span>
+                    <span x-show="paymentSaving" x-cloak>Saving...</span>
                 </button>
             </div>
         </div>
 
-        <div x-show="!clockedIn" x-cloak class="rounded-2xl border border-white/10 bg-gradient-to-r from-emerald-600/25 via-white/5 to-sky-600/20 p-6 shadow-sm">
-            <div class="grid grid-cols-1 gap-6 sm:grid-cols-3">
-                <div>
-                    <div class="text-sm font-semibold text-white/80" x-text="`Total Sales (${dateDisplay})`"></div>
-                    <div class="mt-2 text-5xl font-extrabold tracking-tight text-white" x-text="formatCurrency(todaysTotalSales)"></div>
-                </div>
-                <div>
-                    <div class="text-sm font-semibold text-white/80" x-text="`Total Cash Received (${dateDisplay})`"></div>
-                    <div class="mt-2 text-5xl font-extrabold tracking-tight text-white" x-text="formatCurrency(todaysCashSales)"></div>
-                </div>
-                <div>
-                    <div class="text-sm font-semibold text-white/80" x-text="`Total GCash Payments (${dateDisplay})`"></div>
-                    <div class="mt-2 text-5xl font-extrabold tracking-tight text-white" x-text="formatCurrency(todaysGcashSales)"></div>
-                </div>
-            </div>
-            <div class="mt-2 text-xs text-white/50" x-text="`Automatically calculated from paid orders created on ${dateDisplay}.`"></div>
-        </div>
-
+        <!-- Toast & Error Messages -->
         <template x-if="toastOpen">
             <div class="rounded-xl border border-emerald-500/25 bg-emerald-500/10 px-4 py-3 text-sm text-emerald-200" x-transition.opacity>
                 <span x-text="toastMessage"></span>
@@ -99,11 +95,85 @@
             </div>
         </template>
 
-        <div class="rounded-xl border border-white/10 bg-white/5 p-5 shadow-sm">
+        <!-- Summary Cards Row -->
+        <div class="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-4">
+            <!-- Card 1: Total Sales -->
+            <div class="rounded-xl border border-white/10 bg-white/5 p-5 shadow-sm">
+                <div class="flex items-center gap-3">
+                    <div class="flex h-10 w-10 items-center justify-center rounded-xl bg-purple-500/20 text-purple-400">
+                        <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 8c-1.657 0-3 .895-3 2s1.343 2 3 2 3 .895 3 2-1.343 2-3 2m0-8c1.11 0 2.08.402 2.599 1M12 8V7m0 1v8m0 0v1m0-1c-1.11 0-2.08-.402-2.599-1M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+                        </svg>
+                    </div>
+                    <div>
+                        <div class="text-xs font-semibold text-white/60">Total Sales</div>
+                        <div class="mt-1 text-2xl font-bold text-white" x-text="formatCurrency(todaysTotalSales)"></div>
+                    </div>
+                </div>
+                <div class="mt-3 text-xs text-white/40">System recorded paid orders</div>
+            </div>
+
+            <!-- Card 2: Cash Sales -->
+            <div class="rounded-xl border border-white/10 bg-white/5 p-5 shadow-sm">
+                <div class="flex items-center gap-3">
+                    <div class="flex h-10 w-10 items-center justify-center rounded-xl bg-emerald-500/20 text-emerald-400">
+                        <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M17 9V7a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2m2 4h10a2 2 0 002-2v-6a2 2 0 00-2-2H9a2 2 0 00-2 2v6a2 2 0 002 2zm7-5a2 2 0 11-4 0 2 2 0 014 0z" />
+                        </svg>
+                    </div>
+                    <div>
+                        <div class="text-xs font-semibold text-white/60">Cash Sales</div>
+                        <div class="mt-1 text-2xl font-bold text-white" x-text="formatCurrency(todaysCashSales)"></div>
+                    </div>
+                </div>
+                <div class="mt-3 text-xs text-white/40">Expected cash on hand</div>
+            </div>
+
+            <!-- Card 3: GCash Sales -->
+            <div class="rounded-xl border border-white/10 bg-white/5 p-5 shadow-sm">
+                <div class="flex items-center gap-3">
+                    <div class="flex h-10 w-10 items-center justify-center rounded-xl bg-sky-500/20 text-sky-400">
+                        <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 18h.01M8 21h8a2 2 0 002-2V5a2 2 0 00-2-2H8a2 2 0 00-2 2v14a2 2 0 002 2z" />
+                        </svg>
+                    </div>
+                    <div>
+                        <div class="text-xs font-semibold text-white/60">GCash Sales</div>
+                        <div class="mt-1 text-2xl font-bold text-white" x-text="formatCurrency(todaysGcashSales)"></div>
+                    </div>
+                </div>
+                <div class="mt-3 text-xs text-white/40">Expected GCash payments</div>
+            </div>
+
+            <!-- Card 4: Balance Status -->
+            <div class="rounded-xl border border-white/10 bg-white/5 p-5 shadow-sm">
+                <div class="flex items-center gap-3">
+                    <div class="flex h-10 w-10 items-center justify-center rounded-xl bg-amber-500/20 text-amber-400">
+                        <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" />
+                        </svg>
+                    </div>
+                    <div>
+                        <div class="text-xs font-semibold text-white/60">Balance Status</div>
+                        <div class="mt-1 text-2xl font-bold text-white" x-text="formatCurrency(calculateBalanceDifference())"></div>
+                    </div>
+                </div>
+                <div class="mt-3 flex items-center gap-2">
+                    <span class="inline-flex items-center rounded-full px-2 py-0.5 text-xs font-semibold"
+                        x-bind:class="getBalanceStatusClass()"
+                        x-text="getBalanceStatusText()">
+                    </span>
+                    <span class="text-xs text-white/40" x-text="getBalanceStatusMessage()"></span>
+                </div>
+            </div>
+        </div>
+
+        <!-- Main Payment Entry Section -->
+        <div class="rounded-xl border border-white/10 bg-white/5 p-6 shadow-sm">
             <div class="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
                 <div>
-                    <div class="text-sm font-semibold">Payment Entry</div>
-                    <div class="mt-1 text-xs text-white/50">Record received payments (Cash / GCash) using quick denomination taps.</div>
+                    <div class="text-lg font-bold">Payment Entry</div>
+                    <div class="mt-1 text-sm text-white/50">Record received payments (Cash / GCash) using quick denomination taps.</div>
                 </div>
 
                 <div class="flex items-center gap-2 rounded-xl border border-white/10 bg-[#111]/40 p-1">
@@ -126,150 +196,367 @@
                 </div>
             </div>
 
-            <div class="mt-5 grid grid-cols-1 gap-4 lg:grid-cols-2">
-                <div class="rounded-xl border border-white/10 bg-[#111]/40 p-4">
-                    <div class="flex items-center justify-between gap-3">
-                        <div class="text-sm font-semibold">Received Amount</div>
-                        <button
-                            type="button"
-                            class="inline-flex items-center justify-center rounded-xl border border-white/10 bg-white/5 px-4 py-2 text-sm font-medium text-white/80 hover:bg-white/10"
-                            x-on:click="resetPayment()"
-                        >
-                            Clear
-                        </button>
-                    </div>
-
-                    <div class="mt-3 grid grid-cols-3 gap-2 sm:grid-cols-5">
-                        <template x-for="d in paymentDenominations" :key="d">
-                            <button
-                                type="button"
-                                class="inline-flex h-14 items-center justify-center rounded-xl border border-white/10 bg-white/5 text-base font-semibold text-white/90 hover:bg-white/10 active:scale-[0.98]"
-                                x-on:click="addPaymentDenomination(d)"
-                            >
-                                <span x-text="formatDenomination(d)"></span>
-                            </button>
-                        </template>
-                    </div>
-
-                    <div class="mt-4 rounded-xl border border-white/10 bg-[#111]/50 p-4">
-                        <div class="text-xs text-white/50">Total Received</div>
-                        <div class="mt-1 text-3xl font-semibold" x-text="formatCurrency(paymentTotal())"></div>
-                        <div
-                            class="mt-3 rounded-xl border px-4 py-3 text-sm"
-                            x-bind:class="paymentTotal() === Math.floor((paymentType === 'gcash' ? (todaysGcashSales || 0) : (todaysCashSales || 0)))
-                                ? 'border-emerald-500/30 bg-emerald-500/10 text-emerald-200'
-                                : 'border-rose-500/30 bg-rose-500/10 text-rose-200'"
-                        >
-                            <div class="flex items-center justify-between">
-                                <span class="font-semibold" x-text="paymentType === 'gcash' ? 'Total GCash Payments Today' : 'Total Cash Received Today'"></span>
-                                <span class="font-semibold" x-text="formatCurrency(paymentType === 'gcash' ? todaysGcashSales : todaysCashSales)"></span>
-                            </div>
-                            <div class="mt-1 text-xs" x-text="paymentTotal() === Math.floor((paymentType === 'gcash' ? (todaysGcashSales || 0) : (todaysCashSales || 0))) ? 'Matched' : 'Not matched'"> </div>
-                        </div>
-                        <div class="mt-3 rounded-xl border border-white/10 bg-[#111]/40 px-4 py-3 text-sm">
-                            <div class="flex items-center justify-between">
-                                <span class="font-semibold text-white/80" x-text="paymentType === 'gcash' ? 'Total Cash Received Today' : 'Total GCash Payments Today'"></span>
-                                <span class="font-semibold" x-text="formatCurrency(paymentType === 'gcash' ? todaysCashSales : todaysGcashSales)"></span>
-                            </div>
-                        </div>
-                        <template x-if="paymentType === 'gcash'">
-                            <div class="mt-4">
-                                <label class="text-xs text-white/50">Optional: direct amount input (GCash)</label>
-                                <input
-                                    type="number"
-                                    inputmode="numeric"
-                                    min="0"
-                                    step="1"
-                                    class="mt-1 w-full rounded-xl border border-white/10 bg-[#111]/40 px-3 py-3 text-base text-white"
-                                    placeholder="Enter exact received amount"
-                                    x-model="gcashAmount"
-                                />
-                                <div class="mt-1 text-xs text-white/50">If entered, this will be saved as the received amount (denomination taps still saved as breakdown).</div>
-                            </div>
-                        </template>
-                    </div>
-
-                    <div class="mt-4 flex flex-col gap-3 sm:flex-row">
-                        <button
-                            type="button"
-                            class="inline-flex w-full items-center justify-center rounded-xl bg-[#efe9df] px-4 py-3 text-sm font-semibold text-[#1c1c1c] shadow-sm hover:opacity-95 disabled:opacity-60"
-                            x-on:click="savePaymentEntry()"
-                            x-bind:disabled="paymentSaving"
-                        >
-                            <span x-show="!paymentSaving">Save Payment Entry</span>
-                            <span x-show="paymentSaving" x-cloak>Saving...</span>
-                        </button>
-                        <div class="w-full rounded-xl border border-white/10 bg-[#111]/40 px-4 py-3 text-sm text-white/70">
-                            Type: <span class="font-semibold text-white" x-text="paymentTypeLabel()"></span>
-                        </div>
-                    </div>
-                </div>
-            </div>
-
-            <div class="mt-6">
-                <div class="text-sm font-semibold">Today’s Payment Entries</div>
-                <div class="mt-1 text-xs text-white/50">Saved entries for {{ $dateDisplay ?? $date }} (this user).</div>
-
-                <div class="mt-4 overflow-hidden rounded-xl border border-white/10 bg-[#111]/40">
-                    <div class="flex flex-col gap-3 border-b border-white/10 px-5 py-4 sm:flex-row sm:items-center sm:justify-between">
-                        <div>
-                            <div class="text-sm font-semibold">Entries</div>
-                            <div class="mt-1 text-xs text-white/60">Cash / GCash breakdowns</div>
-                        </div>
-                        <div class="rounded-xl border border-white/10 bg-[#111]/30 px-4 py-3">
-                            <div class="text-xs font-semibold text-white/60" x-text="`Total Sales (${dateDisplay})`"></div>
-                            <div class="mt-1 text-lg font-semibold" x-text="formatCurrency(lowerTodaysTotalSales)"></div>
-                        </div>
-                    </div>
-
-                    <template x-if="!Array.isArray(paymentEntries) || paymentEntries.length === 0">
-                        <div class="px-5 py-4 text-sm text-white/60">No entries yet.</div>
-                    </template>
-
-                    <template x-if="Array.isArray(paymentEntries) && paymentEntries.length > 0">
-                        <div class="divide-y divide-white/10">
-                            <template x-for="entry in paymentEntries" :key="entry.id">
-                                <div class="px-5 py-4">
-                                    <div class="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-                                        <div>
-                                            <div class="text-sm font-semibold" x-text="entry.payment_type === 'gcash' ? 'GCash' : 'Cash'"></div>
-                                            <div class="mt-0.5 text-xs text-white/50" x-text="formatEntryTime(entry.created_at)"></div>
-                                        </div>
-
-                                        <div class="flex items-center gap-2">
-                                            <div class="mr-2 text-lg font-semibold" x-text="formatCurrency(entry.received_amount)"></div>
-                                            <button
-                                                type="button"
-                                                class="inline-flex items-center justify-center rounded-lg bg-sky-600 px-3 py-2 text-xs font-semibold text-white hover:bg-sky-500"
-                                                x-on:click="openEditEntry(entry)"
-                                            >
-                                                Edit
-                                            </button>
-                                            <button
-                                                type="button"
-                                                class="inline-flex items-center justify-center rounded-lg bg-rose-600 px-3 py-2 text-xs font-semibold text-white hover:bg-rose-500"
-                                                x-on:click="deleteEntry(entry)"
-                                            >
-                                                Delete
-                                            </button>
-                                        </div>
+            <div class="mt-6 grid grid-cols-1 gap-6 lg:grid-cols-2">
+                <!-- Left Column: Cash/GCash Tab Content -->
+                <div>
+                    <!-- Cash Tab -->
+                    <template x-if="paymentType === 'cash'">
+                        <div class="rounded-xl border border-white/10 bg-[#111]/40 p-6">
+                            <template x-if="isCashVerified()">
+                                <div class="flex flex-col items-center justify-center rounded-xl border border-emerald-500/30 bg-emerald-500/10 px-6 py-8">
+                                    <div class="flex h-12 w-12 items-center justify-center rounded-full bg-emerald-500/20 text-emerald-400">
+                                        <svg xmlns="http://www.w3.org/2000/svg" class="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7" />
+                                        </svg>
                                     </div>
+                                    <div class="mt-4 text-lg font-semibold text-emerald-200">All Cash payments verified</div>
+                                    <div class="mt-2 text-3xl font-bold text-white" x-text="formatCurrency(paymentsTotalByTypeAfterCutoff('cash'))"></div>
+                                </div>
+                            </template>
 
-                                    <div class="mt-3 grid grid-cols-2 gap-2 sm:grid-cols-4">
-                                        <template x-for="it in (entry.items || [])" :key="entry.id + '-' + it.denomination">
-                                            <div class="rounded-xl border border-white/10 bg-white/5 px-3 py-2 text-xs text-white/80">
-                                                <div class="font-semibold" x-text="formatDenomination(it.denomination)"></div>
-                                                <div class="text-white/60" x-text="'Qty: ' + it.quantity"></div>
+                            <template x-if="!isCashVerified()">
+                                <div>
+                                    <div class="grid grid-cols-2 gap-3 sm:grid-cols-4">
+                                        <template x-for="d in paymentDenominations" :key="d">
+                                            <div class="flex flex-col items-center rounded-xl border border-white/10 bg-[#111]/60 p-3">
+                                                <div class="text-xs font-semibold text-white/60" x-text="formatDenomination(d)"></div>
+                                                <div class="mt-2 flex items-center gap-2">
+                                                    <button
+                                                        type="button"
+                                                        class="grid h-8 w-8 place-items-center rounded-lg border border-white/10 bg-white/5 text-white/80 hover:bg-white/10"
+                                                        x-on:click="removePaymentDenomination(d)"
+                                                    >
+                                                        -
+                                                    </button>
+                                                    <div class="w-12 text-center text-sm font-semibold" x-text="paymentQty(d)"></div>
+                                                    <button
+                                                        type="button"
+                                                        class="grid h-8 w-8 place-items-center rounded-lg border border-white/10 bg-white/5 text-white/80 hover:bg-white/10"
+                                                        x-on:click="addPaymentDenomination(d)"
+                                                    >
+                                                        +
+                                                    </button>
+                                                </div>
                                             </div>
                                         </template>
+                                    </div>
+
+                                    <div class="mt-6 flex items-center justify-between rounded-xl border border-white/10 bg-[#111]/50 px-4 py-3">
+                                        <div class="text-sm text-white/60">Total Received</div>
+                                        <div class="text-2xl font-bold text-white" x-text="formatCurrency(paymentTotal())"></div>
+                                    </div>
+
+                                    <div class="mt-4">
+                                        <button
+                                            type="button"
+                                            class="inline-flex w-full items-center justify-center rounded-xl bg-[#efe9df] px-4 py-3 text-sm font-semibold text-[#1c1c1c] shadow-sm hover:opacity-95 disabled:opacity-60"
+                                            x-on:click="savePaymentEntry()"
+                                            x-bind:disabled="paymentSaving"
+                                        >
+                                            <span x-show="!paymentSaving">Save Cash Entry</span>
+                                            <span x-show="paymentSaving" x-cloak>Saving...</span>
+                                        </button>
                                     </div>
                                 </div>
                             </template>
                         </div>
                     </template>
+
+                    <!-- GCash Tab -->
+                    <template x-if="paymentType === 'gcash'">
+                        <div class="rounded-xl border border-white/10 bg-[#111]/40 p-6">
+                            <!-- Success State -->
+                            <div x-show="isGcashVerified()">
+                                <div class="flex flex-col items-center justify-center rounded-xl border border-sky-500/30 bg-sky-500/10 px-6 py-8">
+                                    <div class="flex h-12 w-12 items-center justify-center rounded-full bg-sky-500/20 text-sky-400">
+                                        <svg xmlns="http://www.w3.org/2000/svg" class="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7" />
+                                        </svg>
+                                    </div>
+                                    <div class="mt-4 text-lg font-semibold text-sky-200">All GCash payments verified</div>
+                                    <div class="mt-2 text-3xl font-bold text-white" x-text="formatCurrency(paymentsTotalByTypeAfterCutoff('gcash'))"></div>
+                                </div>
+                            </div>
+
+                            <!-- Transaction List -->
+                            <div x-show="!isGcashVerified()">
+                                <div x-show="gcashOrders.length === 0">
+                                    <div class="flex flex-col items-center justify-center rounded-xl border border-white/10 bg-[#111]/60 px-6 py-12">
+                                        <div class="flex h-12 w-12 items-center justify-center rounded-full bg-white/5 text-white/40">
+                                            <svg xmlns="http://www.w3.org/2000/svg" class="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 18h.01M8 21h8a2 2 0 002-2V5a2 2 0 00-2-2H8a2 2 0 00-2 2v14a2 2 0 002 2z" />
+                                            </svg>
+                                        </div>
+                                        <div class="mt-4 text-sm font-semibold text-white/60">No GCash transactions found for this date.</div>
+                                    </div>
+                                </div>
+
+                                <div x-show="gcashOrders.length > 0">
+                                    <div class="flex items-center justify-between mb-4">
+                                        <div class="text-sm text-white/60">
+                                            <span x-text="gcashOrders.filter(o => verifiedGcashOrderIds.includes(o.id)).length"></span> of <span x-text="gcashOrders.length"></span> verified
+                                        </div>
+                                        <button
+                                            type="button"
+                                            class="inline-flex items-center justify-center rounded-xl bg-sky-600 px-4 py-2 text-sm font-semibold text-white hover:bg-sky-500 disabled:opacity-60"
+                                            x-on:click="confirmAllGcashOrders()"
+                                            x-bind:disabled="gcashOrders.every(o => verifiedGcashOrderIds.includes(o.id))"
+                                        >
+                                            Confirm All
+                                        </button>
+                                    </div>
+
+                                    <div class="space-y-3 max-h-96 overflow-y-auto">
+                                        <template x-for="order in gcashOrders" :key="order.id">
+                                            <div class="rounded-xl border border-white/10 bg-[#111]/60 p-4">
+                                                <div class="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
+                                                    <div class="flex-1">
+                                                        <div class="flex items-center gap-2">
+                                                            <span class="text-sm font-semibold text-white" x-text="order.order_number"></span>
+                                                            <span class="inline-flex items-center rounded-full px-2 py-0.5 text-xs font-semibold"
+                                                                x-bind:class="verifiedGcashOrderIds.includes(order.id) ? 'bg-emerald-500/20 text-emerald-300' : 'bg-amber-500/20 text-amber-300'"
+                                                                x-text="verifiedGcashOrderIds.includes(order.id) ? 'Verified' : 'Pending Verification'">
+                                                            </span>
+                                                        </div>
+                                                        <div class="mt-2 text-xs text-white/50" x-text="formatEntryTime(order.created_at)"></div>
+                                                        <div class="mt-3 space-y-1">
+                                                            <div class="text-xs text-white/60">
+                                                                <span class="font-semibold">Sender:</span> <span x-text="order.gcash_sender_name || 'N/A'"></span>
+                                                            </div>
+                                                            <div class="text-xs text-white/60">
+                                                                <span class="font-semibold">Ref No:</span> <span x-text="order.gcash_reference || 'N/A'"></span>
+                                                            </div>
+                                                            <div class="text-xs text-white/60">
+                                                                <span class="font-semibold">Mobile:</span> <span x-text="order.gcash_sender_mobile || 'N/A'"></span>
+                                                            </div>
+                                                        </div>
+                                                        <div class="mt-3 text-lg font-bold text-sky-400" x-text="formatCurrency(order.total_amount)"></div>
+                                                    </div>
+                                                    <div class="flex flex-col gap-2 sm:items-end">
+                                                        <button
+                                                            type="button"
+                                                            class="inline-flex items-center justify-center rounded-lg px-4 py-2 text-xs font-semibold"
+                                                            x-bind:class="verifiedGcashOrderIds.includes(order.id) ? 'bg-emerald-600 text-white cursor-default' : 'bg-sky-600 text-white hover:bg-sky-500'"
+                                                            x-bind:disabled="verifiedGcashOrderIds.includes(order.id)"
+                                                            x-on:click="verifyGcashOrder(order.id)"
+                                                        >
+                                                            <span x-text="verifiedGcashOrderIds.includes(order.id) ? 'Verified' : 'Confirm'"></span>
+                                                        </button>
+                                                    </div>
+                                                </div>
+                                            </div>
+                                        </template>
+                                    </div>
+
+                                    <div class="mt-6 flex items-center justify-between rounded-xl border border-white/10 bg-[#111]/50 px-4 py-3">
+                                        <div class="text-sm text-white/60">Total Verified GCash</div>
+                                        <div class="text-2xl font-bold text-sky-400" x-text="formatCurrency(verifiedGcashTotal())"></div>
+                                    </div>
+
+                                    <div class="mt-4">
+                                        <button
+                                            type="button"
+                                            class="inline-flex w-full items-center justify-center rounded-xl bg-[#efe9df] px-4 py-3 text-sm font-semibold text-[#1c1c1c] shadow-sm hover:opacity-95 disabled:opacity-60"
+                                            x-on:click="saveGcashVerification()"
+                                            x-bind:disabled="paymentSaving || verifiedGcashOrderIds.length === 0"
+                                        >
+                                            <span x-show="!paymentSaving">Save GCash Verification</span>
+                                            <span x-show="paymentSaving" x-cloak>Saving...</span>
+                                        </button>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    </template>
+                </div>
+
+                <!-- Right Column: Reconciliation Summary -->
+                <div class="rounded-xl border border-white/10 bg-[#111]/40 p-6">
+                    <div class="text-lg font-bold">Reconciliation Summary</div>
+                    <div class="mt-1 text-sm text-white/50">Summary of expected vs counted amounts.</div>
+
+                    <div class="mt-6 space-y-4">
+                        <!-- Cash Block -->
+                        <div class="rounded-xl border border-white/10 bg-[#111]/60 p-4">
+                            <div class="text-sm font-semibold text-emerald-400">Cash</div>
+                            <div class="mt-3 space-y-2">
+                                <div class="flex items-center justify-between">
+                                    <span class="text-xs text-white/60">Expected Cash</span>
+                                    <span class="text-sm font-semibold text-white" x-text="formatCurrency(todaysCashSales)"></span>
+                                </div>
+                                <div class="flex items-center justify-between">
+                                    <span class="text-xs text-white/60">Verified Cash</span>
+                                    <span class="text-sm font-semibold text-emerald-300" x-text="formatCurrency(paymentsTotalByTypeAfterCutoff('cash'))"></span>
+                                </div>
+                                <div class="flex items-center justify-between border-t border-white/10 pt-2">
+                                    <span class="text-xs font-semibold text-white/80">Difference</span>
+                                    <span class="text-sm font-bold" x-bind:class="getDifferenceClass(todaysCashSales, paymentsTotalByTypeAfterCutoff('cash'))" x-text="formatCurrency(calculateDifference(todaysCashSales, paymentsTotalByTypeAfterCutoff('cash')))"></span>
+                                </div>
+                            </div>
+                        </div>
+
+                        <!-- GCash Block -->
+                        <div class="rounded-xl border border-white/10 bg-[#111]/60 p-4">
+                            <div class="text-sm font-semibold text-sky-400">GCash</div>
+                            <div class="mt-3 space-y-2">
+                                <div class="flex items-center justify-between">
+                                    <span class="text-xs text-white/60">Expected GCash</span>
+                                    <span class="text-sm font-semibold text-white" x-text="formatCurrency(todaysGcashSales)"></span>
+                                </div>
+                                <div class="flex items-center justify-between">
+                                    <span class="text-xs text-white/60">Verified GCash</span>
+                                    <span class="text-sm font-semibold text-sky-300" x-text="formatCurrency(paymentsTotalByTypeAfterCutoff('gcash'))"></span>
+                                </div>
+                                <div class="flex items-center justify-between border-t border-white/10 pt-2">
+                                    <span class="text-xs font-semibold text-white/80">Difference</span>
+                                    <span class="text-sm font-bold" x-bind:class="getDifferenceClass(todaysGcashSales, paymentsTotalByTypeAfterCutoff('gcash'))" x-text="formatCurrency(calculateDifference(todaysGcashSales, paymentsTotalByTypeAfterCutoff('gcash')))"></span>
+                                </div>
+                            </div>
+                        </div>
+
+                        <!-- Total Block -->
+                        <div class="rounded-xl border border-white/10 bg-[#111]/60 p-4">
+                            <div class="text-sm font-semibold text-amber-400">Total (Cash + GCash)</div>
+                            <div class="mt-3 space-y-2">
+                                <div class="flex items-center justify-between">
+                                    <span class="text-xs text-white/60">Total Expected</span>
+                                    <span class="text-sm font-semibold text-white" x-text="formatCurrency(todaysTotalSales)"></span>
+                                </div>
+                                <div class="flex items-center justify-between">
+                                    <span class="text-xs text-white/60">Total Verified</span>
+                                    <span class="text-sm font-semibold text-amber-300" x-text="formatCurrency(paymentsTotalByTypeAfterCutoff('cash') + paymentsTotalByTypeAfterCutoff('gcash'))"></span>
+                                </div>
+                                <div class="flex items-center justify-between border-t border-white/10 pt-2">
+                                    <span class="text-xs font-semibold text-white/80">Difference</span>
+                                    <span class="text-sm font-bold" x-bind:class="getDifferenceClass(todaysTotalSales, paymentsTotalByTypeAfterCutoff('cash') + paymentsTotalByTypeAfterCutoff('gcash'))" x-text="formatCurrency(calculateDifference(todaysTotalSales, paymentsTotalByTypeAfterCutoff('cash') + paymentsTotalByTypeAfterCutoff('gcash')))"></span>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
                 </div>
             </div>
         </div>
+
+        <!-- Today's Payment Entries Section -->
+        <div class="rounded-xl border border-white/10 bg-white/5 p-6 shadow-sm">
+            <div class="text-lg font-bold">Today's Payment Entries</div>
+            <div class="mt-1 text-sm text-white/50">Temporary working entries for the current session.</div>
+
+            <div class="mt-4 overflow-hidden rounded-xl border border-white/10 bg-[#111]/40">
+                <template x-if="!Array.isArray(paymentEntries) || paymentEntries.length === 0">
+                    <div class="px-5 py-8 text-center text-sm text-white/60">No active payment entries.</div>
+                </template>
+
+                <template x-if="Array.isArray(paymentEntries) && paymentEntries.length > 0">
+                    <div class="overflow-x-auto">
+                        <table class="w-full">
+                            <thead>
+                                <tr class="border-b border-white/10 bg-[#111]/30">
+                                    <th class="px-5 py-3 text-left text-xs font-semibold text-white/60">Type</th>
+                                    <th class="px-5 py-3 text-left text-xs font-semibold text-white/60">Time</th>
+                                    <th class="px-5 py-3 text-left text-xs font-semibold text-white/60">Total Amount</th>
+                                    <th class="px-5 py-3 text-left text-xs font-semibold text-white/60">Status</th>
+                                    <th class="px-5 py-3 text-left text-xs font-semibold text-white/60">Details</th>
+                                    <th class="px-5 py-3 text-right text-xs font-semibold text-white/60">Action</th>
+                                </tr>
+                            </thead>
+                            <tbody class="divide-y divide-white/10">
+                                <!-- Payment Entry rows -->
+                                <template x-for="entry in paymentEntries" :key="entry.id">
+                                    <tr class="hover:bg-white/5">
+                                        <td class="px-5 py-4">
+                                            <template x-if="entry.payment_type === 'gcash' && entry.order_id">
+                                                <span class="inline-flex items-center rounded-full px-2.5 py-0.5 text-xs font-semibold bg-sky-500/20 text-sky-300">GCash Verification</span>
+                                            </template>
+                                            <template x-if="entry.payment_type === 'gcash' && !entry.order_id">
+                                                <span class="inline-flex items-center rounded-full px-2.5 py-0.5 text-xs font-semibold bg-sky-500/20 text-sky-300">GCash</span>
+                                            </template>
+                                            <template x-if="entry.payment_type === 'cash'">
+                                                <span class="inline-flex items-center rounded-full px-2.5 py-0.5 text-xs font-semibold bg-emerald-500/20 text-emerald-300">Cash</span>
+                                            </template>
+                                        </td>
+                                        <td class="px-5 py-4 text-sm text-white/80" x-text="formatEntryTime(entry.created_at)"></td>
+                                        <td class="px-5 py-4 text-sm font-semibold text-white" x-text="formatCurrency(entry.received_amount)"></td>
+                                        <td class="px-5 py-4">
+                                            <span class="inline-flex items-center rounded-full px-2.5 py-0.5 text-xs font-semibold bg-emerald-500/20 text-emerald-300">Verified</span>
+                                        </td>
+                                        <td class="px-5 py-4">
+                                            <template x-if="entry.payment_type === 'gcash' && entry.order_id">
+                                                <div class="space-y-1">
+                                                    <div class="flex flex-wrap gap-1">
+                                                        <span class="inline-flex items-center rounded-md px-2 py-1 text-xs font-medium bg-sky-500/20 text-sky-300">Order Verified</span>
+                                                    </div>
+                                                    <div class="text-xs text-white/60" x-text="'₱' + formatCurrency(entry.received_amount)"></div>
+                                                    <template x-if="entry.gcash_details">
+                                                        <div class="text-xs text-white/50" x-text="entry.gcash_details.sender_name || ''"></div>
+                                                        <div class="text-xs text-white/50" x-text="'Ref: ' + (entry.gcash_details.gcash_reference || '')"></div>
+                                                        <template x-if="entry.gcash_details.items && entry.gcash_details.items.length > 0">
+                                                            <div class="text-xs text-white/50">
+                                                                Items: <span x-text="entry.gcash_details.items.map(i => i.name).join(', ')"></span>
+                                                            </div>
+                                                        </template>
+                                                    </template>
+                                                </div>
+                                            </template>
+                                            <template x-if="entry.payment_type === 'gcash' && !entry.order_id">
+                                                <div class="flex flex-wrap gap-1">
+                                                    <template x-for="it in (entry.items || []).slice(0, 3)" :key="entry.id + '-' + it.denomination">
+                                                        <span class="inline-flex items-center rounded-md px-2 py-1 text-xs font-medium bg-white/10 text-white/70" x-text="formatDenomination(it.denomination) + ' x' + it.quantity"></span>
+                                                    </template>
+                                                    <template x-if="(entry.items || []).length > 3">
+                                                        <span class="inline-flex items-center rounded-md px-2 py-1 text-xs font-medium bg-white/10 text-white/70" x-text="'+' + ((entry.items || []).length - 3) + ' more'"></span>
+                                                    </template>
+                                                </div>
+                                            </template>
+                                            <template x-if="entry.payment_type === 'cash'">
+                                                <div class="flex flex-wrap gap-1">
+                                                    <template x-for="it in (entry.items || []).slice(0, 3)" :key="entry.id + '-' + it.denomination">
+                                                        <span class="inline-flex items-center rounded-md px-2 py-1 text-xs font-medium bg-white/10 text-white/70" x-text="formatDenomination(it.denomination) + ' x' + it.quantity"></span>
+                                                    </template>
+                                                    <template x-if="(entry.items || []).length > 3">
+                                                        <span class="inline-flex items-center rounded-md px-2 py-1 text-xs font-medium bg-white/10 text-white/70" x-text="'+' + ((entry.items || []).length - 3) + ' more'"></span>
+                                                    </template>
+                                                </div>
+                                            </template>
+                                        </td>
+                                        <td class="px-5 py-4 text-right">
+                                            <div class="flex items-center justify-end gap-2">
+                                                <template x-if="entry.payment_type === 'cash' && !isCashVerified()">
+                                                    <button
+                                                        type="button"
+                                                        class="inline-flex items-center justify-center rounded-lg bg-sky-600 px-3 py-1.5 text-xs font-semibold text-white hover:bg-sky-500"
+                                                        x-on:click="openEditEntry(entry)"
+                                                    >
+                                                        Edit
+                                                    </button>
+                                                </template>
+                                                <template x-if="entry.payment_type === 'gcash' && !entry.order_id">
+                                                    <button
+                                                        type="button"
+                                                        class="inline-flex items-center justify-center rounded-lg bg-sky-600 px-3 py-1.5 text-xs font-semibold text-white hover:bg-sky-500"
+                                                        x-on:click="openEditEntry(entry)"
+                                                    >
+                                                        Edit
+                                                    </button>
+                                                </template>
+                                                <button
+                                                    type="button"
+                                                    class="inline-flex items-center justify-center rounded-lg bg-rose-600 px-3 py-1.5 text-xs font-semibold text-white hover:bg-rose-500"
+                                                    x-on:click="deleteEntry(entry)"
+                                                >
+                                                    Delete
+                                                </button>
+                                            </div>
+                                        </td>
+                                    </tr>
+                                </template>
+                            </tbody>
+                        </table>
+                    </div>
+                </template>
+            </div>
+        </div>
+
         <template x-if="editEntryOpen">
             <div class="fixed inset-0 z-50" x-on:keydown.escape.window="closeEditEntry()">
                 <div class="absolute inset-0 bg-black/70" x-transition.opacity x-on:click="closeEditEntry()"></div>
@@ -281,18 +568,6 @@
                         <div class="mt-5 rounded-xl border border-white/10 bg-[#111]/40 p-4">
                             <div class="text-xs text-white/50">Total</div>
                             <div class="mt-1 text-3xl font-semibold" x-text="formatCurrency(editPaymentTotal())"></div>
-                            <div
-                                class="mt-3 rounded-xl border px-3 py-2 text-sm"
-                                x-bind:class="editPaymentTotal() === Math.floor(lowerTodaysTotalSales || 0)
-                                    ? 'border-emerald-500/30 bg-emerald-500/10 text-emerald-200'
-                                    : 'border-rose-500/30 bg-rose-500/10 text-rose-200'"
-                            >
-                                <div class="flex items-center justify-between">
-                                    <span class="font-semibold">Today's Total Sales</span>
-                                    <span class="font-semibold" x-text="formatCurrency(lowerTodaysTotalSales)"></span>
-                                </div>
-                                <div class="mt-1 text-xs" x-text="editPaymentTotal() === Math.floor(lowerTodaysTotalSales || 0) ? 'Matched' : 'Not matched'"> </div>
-                            </div>
                         </div>
 
                         <div class="mt-4 space-y-2">
@@ -353,6 +628,7 @@
                 </div>
             </div>
         </template>
+
     </div>
 
     <script>
@@ -396,9 +672,15 @@
                 editPaymentBreakdown: {},
                 editSaving: false,
 
+                gcashOrders: Array.isArray(payload?.gcashOrders) ? payload.gcashOrders : [],
+                confirmedOrderIds: Array.isArray(payload?.confirmedOrderIds) ? payload.confirmedOrderIds : [],
+                verifiedGcashOrderIds: [],
+
                 init() {
                     console.log('MoneyInventory init payload:', payload);
                     console.log('todaysTotalSales from backend:', payload?.todaysTotalSales);
+                    console.log('gcashOrders from backend:', payload?.gcashOrders);
+                    console.log('confirmedOrderIds from backend:', payload?.confirmedOrderIds);
                     this.initialQuantities = JSON.parse(JSON.stringify(this.quantities || {}));
                     this.denominations = (this.denominations || []).map(d => Number(d)).filter(d => Number.isFinite(d));
                     this.denominations.sort((a, b) => b - a);
@@ -465,6 +747,68 @@
                             // ignore polling errors
                         }
                     }, 10000);
+                },
+
+                async refreshSalesData() {
+                    try {
+                        const url = `${window.location.pathname}?date=${encodeURIComponent(this.date)}`;
+                        const res = await fetch(url, {
+                            method: 'GET',
+                            headers: {
+                                'Accept': 'application/json',
+                                'X-Requested-With': 'XMLHttpRequest',
+                            },
+                        });
+
+                        const data = await res.json().catch(() => ({}));
+                        if (!res.ok) {
+                            this.errorMessage = 'Failed to refresh sales data.';
+                            return;
+                        }
+
+                        // Update sales summary
+                        this.todaysTotalSales = Number(data?.summary?.total_sales || 0);
+                        this.todaysCashSales = Number(data?.summary?.cash || 0);
+                        this.todaysGcashSales = Number(data?.summary?.gcash || 0);
+                        this.lowerTodaysTotalSales = Number(data?.summary?.lower_total_sales || 0);
+                        this.dateDisplay = String(data?.date_display || this.dateDisplay || '').trim();
+
+                        // Reload GCash orders
+                        if (data?.gcashOrders) {
+                            this.gcashOrders = data.gcashOrders;
+                            this.confirmedOrderIds = data.confirmedOrderIds || [];
+                        }
+
+                        // Reload payment entries
+                        if (data?.paymentEntries) {
+                            this.paymentEntries = data.paymentEntries;
+                        }
+
+                        // Reset active inputs
+                        this.resetActiveMoneyInventorySession();
+
+                        this.showToast('Sales data refreshed successfully.');
+                    } catch (e) {
+                        this.errorMessage = 'Failed to refresh sales data.';
+                    }
+                },
+
+                resetActiveMoneyInventorySession() {
+                    // Reset cash denomination quantities to 0
+                    Object.keys(this.quantities).forEach(key => {
+                        this.quantities[key] = 0;
+                    });
+                    this.initialQuantities = JSON.parse(JSON.stringify(this.quantities));
+
+                    // Reset payment breakdown to empty
+                    this.paymentBreakdown = this.paymentDenominations.reduce((acc, d) => {
+                        acc[String(d)] = 0;
+                        return acc;
+                    }, {});
+                    this.initialPaymentBreakdown = JSON.parse(JSON.stringify(this.paymentBreakdown || {}));
+
+                    // Reset GCash verification state
+                    this.verifiedGcashOrderIds = [];
                 },
 
                 scheduleMidnightRollover() {
@@ -559,6 +903,32 @@
                     const d = String(now.getDate()).padStart(2, '0');
                     const today = `${y}-${m}-${d}`;
                     return String(this.date || '') === today;
+                },
+
+                async resetTodaysSales() {
+                    if (!this.resetTodaysSalesUrl) return;
+
+                    const token = document.querySelector('meta[name="csrf-token"]')?.getAttribute('content') || null;
+                    if (!token) return;
+
+                    try {
+                        const res = await fetch(this.resetTodaysSalesUrl, {
+                            method: 'POST',
+                            headers: {
+                                'Accept': 'application/json',
+                                'Content-Type': 'application/json',
+                                'X-Requested-With': 'XMLHttpRequest',
+                                'X-CSRF-TOKEN': token,
+                            },
+                        });
+
+                        if (res.ok) {
+                            // Reload sales data to reflect the reset
+                            await this.refreshSalesData();
+                        }
+                    } catch (e) {
+                        console.error('Failed to reset today\'s sales:', e);
+                    }
                 },
 
                 async maybeReconcileDay() {
@@ -671,6 +1041,164 @@
                     const d = new Date(raw);
                     if (Number.isNaN(d.getTime())) return '';
                     return d.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+                },
+
+                formatDisplayDate(dateStr) {
+                    const raw = String(dateStr || '').trim();
+                    if (!raw) return '';
+                    const d = new Date(raw);
+                    if (Number.isNaN(d.getTime())) return raw;
+                    return d.toLocaleDateString('en-US', { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' });
+                },
+
+                calculateBalanceDifference() {
+                    const expected = this.todaysTotalSales || 0;
+                    const verified = (this.paymentsTotalByTypeAfterCutoff('cash') || 0) + (this.paymentsTotalByTypeAfterCutoff('gcash') || 0);
+                    return expected - verified;
+                },
+
+                getBalanceStatusClass() {
+                    const diff = this.calculateBalanceDifference();
+                    if (diff === 0) return 'bg-emerald-500/20 text-emerald-300';
+                    if (diff > 0) return 'bg-amber-500/20 text-amber-300';
+                    return 'bg-rose-500/20 text-rose-300';
+                },
+
+                getBalanceStatusText() {
+                    const diff = this.calculateBalanceDifference();
+                    if (diff === 0) return 'Balanced';
+                    if (diff > 0) return 'Short';
+                    return 'Over';
+                },
+
+                getBalanceStatusMessage() {
+                    const diff = this.calculateBalanceDifference();
+                    if (diff === 0) return 'Cash/GCash is balanced';
+                    if (diff > 0) return 'Cash/GCash is short';
+                    return 'Cash/GCash is over';
+                },
+
+                isCashVerified() {
+                    const expected = this.todaysCashSales || 0;
+                    const verified = this.paymentsTotalByTypeAfterCutoff('cash') || 0;
+                    return expected > 0 && verified >= expected;
+                },
+
+                isGcashVerified() {
+                    const expected = this.todaysGcashSales || 0;
+                    const verified = this.paymentsTotalByTypeAfterCutoff('gcash') || 0;
+                    const hasUnverified = this.gcashOrders.some(o => !this.verifiedGcashOrderIds.includes(o.id));
+                    return expected > 0 && verified >= expected && !hasUnverified;
+                },
+
+                calculateDifference(expected, actual) {
+                    return (Number(expected) || 0) - (Number(actual) || 0);
+                },
+
+                getDifferenceClass(expected, actual) {
+                    const diff = this.calculateDifference(expected, actual);
+                    if (diff === 0) return 'text-emerald-400';
+                    if (diff > 0) return 'text-amber-400';
+                    return 'text-rose-400';
+                },
+
+                verifyGcashOrder(orderId) {
+                    const id = Number(orderId);
+                    if (this.verifiedGcashOrderIds.includes(id)) {
+                        this.verifiedGcashOrderIds = this.verifiedGcashOrderIds.filter(oid => oid !== id);
+                    } else {
+                        this.verifiedGcashOrderIds.push(id);
+                    }
+                },
+
+                confirmAllGcashOrders() {
+                    this.verifiedGcashOrderIds = this.gcashOrders.map(o => o.id);
+                },
+
+                verifiedGcashTotal() {
+                    return this.gcashOrders
+                        .filter(o => this.verifiedGcashOrderIds.includes(o.id))
+                        .reduce((sum, o) => sum + (Number(o.total_amount) || 0), 0);
+                },
+
+                async saveGcashVerification() {
+                    if (this.verifiedGcashOrderIds.length === 0) {
+                        this.errorMessage = 'Please verify at least one GCash transaction.';
+                        return;
+                    }
+
+                    this.paymentSaving = true;
+                    try {
+                        const verifiedOrders = this.gcashOrders.filter(o => this.verifiedGcashOrderIds.includes(o.id));
+
+                        // Create a payment entry for each verified GCash order
+                        for (const order of verifiedOrders) {
+                            const res = await fetch(this.paymentSaveUrl, {
+                                method: 'POST',
+                                headers: {
+                                    'Accept': 'application/json',
+                                    'Content-Type': 'application/json',
+                                    'X-Requested-With': 'XMLHttpRequest',
+                                    'X-CSRF-TOKEN': document.querySelector('meta[name="csrf-token"]')?.getAttribute('content') || '',
+                                },
+                                body: JSON.stringify({
+                                    date: this.date,
+                                    payment_type: 'gcash',
+                                    received_amount: order.total_amount,
+                                    order_id: order.id,
+                                    breakdown: {},
+                                }),
+                            });
+
+                            if (!res.ok) {
+                                const data = await res.json().catch(() => ({}));
+                                this.errorMessage = data?.message || 'Failed to save GCash verification.';
+                                this.paymentSaving = false;
+                                return;
+                            }
+
+                            const data = await res.json();
+                            const savedEntry = data?.payment_entry;
+
+                            if (savedEntry) {
+                                // Add the saved entry to paymentEntries at the beginning with GCash details
+                                const newEntry = {
+                                    id: savedEntry.id,
+                                    payment_type: 'gcash',
+                                    received_amount: savedEntry.received_amount,
+                                    created_at: savedEntry.created_at,
+                                    order_id: savedEntry.order_id,
+                                    items: savedEntry.items || [],
+                                    gcash_details: {
+                                        sender_name: order.gcash_sender_name || '',
+                                        gcash_reference: order.gcash_reference || '',
+                                        gcash_sender_mobile: order.gcash_sender_mobile || '',
+                                        order_number: order.order_number || '',
+                                        items: order.items || [],
+                                    },
+                                };
+                                this.paymentEntries = [newEntry, ...this.paymentEntries];
+                            }
+                        }
+
+                        // Remove verified orders from gcashOrders
+                        this.gcashOrders = this.gcashOrders.filter(o => !this.verifiedGcashOrderIds.includes(o.id));
+                        this.verifiedGcashOrderIds = [];
+
+                        // Check if all GCash payments are now verified
+                        const totalVerifiedGcash = this.paymentsTotalByTypeAfterCutoff('gcash');
+                        const expectedGcash = this.todaysGcashSales || 0;
+
+                        if (this.gcashOrders.length === 0 && totalVerifiedGcash >= expectedGcash) {
+                            this.showToast('All GCash payments verified');
+                        } else {
+                            this.showToast(`Successfully verified ${verifiedOrders.length} GCash transaction(s).`);
+                        }
+                    } catch (e) {
+                        this.errorMessage = 'An error occurred while saving GCash verification.';
+                    } finally {
+                        this.paymentSaving = false;
+                    }
                 },
 
                 buildEntryUrl(template, entryId) {
@@ -942,11 +1470,8 @@
                         return;
                     }
 
-                    const expectedTotal = Math.floor(this.paymentType === 'gcash' ? (this.todaysGcashSales || 0) : (this.todaysCashSales || 0));
-                    if (Math.floor(receivedAmount) !== expectedTotal) {
-                        this.errorMessage = `Received amount must match ${this.paymentType === 'gcash' ? 'Total GCash Payments Today' : 'Total Cash Received Today'} (${this.formatCurrency(expectedTotal)}).`;
-                        return;
-                    }
+                    // Remove strict validation - allow saving even if amount doesn't match expected total
+                    // This allows staff to save working entries during reconciliation process
 
                     this.paymentSaving = true;
                     try {
@@ -973,12 +1498,13 @@
                             return;
                         }
 
-                        const entry = data?.entry || null;
+                        const entry = data?.payment_entry || data?.entry || null;
                         if (entry) {
                             this.paymentEntries = [entry, ...(Array.isArray(this.paymentEntries) ? this.paymentEntries : [])];
                         }
 
-                        await this.maybeReconcileDay();
+                        // Reset today's sales after saving payment entry
+                        await this.resetTodaysSales();
 
                         this.resetPayment();
                         this.showToast(data?.message || 'Payment entry saved.');

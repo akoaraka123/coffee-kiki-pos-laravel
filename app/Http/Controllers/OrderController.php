@@ -56,21 +56,47 @@ class OrderController extends Controller
         $start = Carbon::today();
         $end = Carbon::tomorrow();
 
+        // Check if today's sales have been reconciled
+        $reconciledAt = null;
+        $reconciliationRow = DB::table('daily_sales_reconciliations')
+            ->where('user_id', $userId)
+            ->where('date', $start->toDateString())
+            ->first(['reconciled_at']);
+        if ($reconciliationRow && $reconciliationRow->reconciled_at) {
+            try {
+                $reconciledAt = Carbon::parse($reconciliationRow->reconciled_at);
+            } catch (\Throwable $e) {
+                $reconciledAt = null;
+            }
+        }
+
         $todaySales = 0.0;
         $todayOrders = 0;
         if ($userId) {
-            $todaySales = (float) Order::query()
+            $todaySalesQuery = Order::query()
                 ->where('created_by', $userId)
                 ->where('status', 'paid')
                 ->where('created_at', '>=', $start)
-                ->where('created_at', '<', $end)
-                ->sum('total');
+                ->where('created_at', '<', $end);
 
-            $todayOrders = (int) Order::query()
+            // Exclude orders created before reconciliation cutoff
+            if ($reconciledAt) {
+                $todaySalesQuery->where('created_at', '>', $reconciledAt);
+            }
+
+            $todaySales = (float) $todaySalesQuery->sum('total');
+
+            $todayOrdersQuery = Order::query()
                 ->where('created_by', $userId)
                 ->where('created_at', '>=', $start)
-                ->where('created_at', '<', $end)
-                ->count();
+                ->where('created_at', '<', $end);
+
+            // Exclude orders created before reconciliation cutoff
+            if ($reconciledAt) {
+                $todayOrdersQuery->where('created_at', '>', $reconciledAt);
+            }
+
+            $todayOrders = (int) $todayOrdersQuery->count();
         }
 
         $dailySummaries = collect();

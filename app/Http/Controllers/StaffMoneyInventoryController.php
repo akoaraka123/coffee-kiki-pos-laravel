@@ -129,7 +129,31 @@ class StaffMoneyInventoryController extends Controller
                 $q->orderByDesc('denomination');
             }])
             ->latest()
-            ->get(['id', 'user_id', 'date', 'payment_type', 'received_amount', 'created_at']);
+            ->get(['id', 'user_id', 'date', 'payment_type', 'received_amount', 'created_at', 'order_id']);
+
+        // Fetch GCash orders for the current date
+        $gcashOrders = Order::query()
+            ->where('created_by', $user->id)
+            ->where('status', 'paid')
+            ->where('payment_type', 'gcash')
+            ->whereDate('created_at', $date)
+            ->with(['items' => function ($q) {
+                $q->select(['id', 'order_id', 'name', 'price', 'quantity']);
+            }])
+            ->orderBy('created_at')
+            ->get(['id', 'order_number', 'total_amount', 'created_at', 'gcash_reference', 'gcash_sender_name', 'gcash_sender_mobile']);
+
+        // Get confirmed order IDs from payment entries
+        $confirmedOrderIds = $paymentEntries
+            ->where('payment_type', 'gcash')
+            ->pluck('order_id')
+            ->filter()
+            ->toArray();
+
+        // Filter out confirmed GCash orders
+        $gcashOrders = $gcashOrders->reject(function ($order) use ($confirmedOrderIds) {
+            return in_array($order->id, $confirmedOrderIds);
+        })->values();
 
         if ($request->expectsJson()) {
             return response()->json([
@@ -161,6 +185,8 @@ class StaffMoneyInventoryController extends Controller
             'clockedIn' => (bool) ($user->clocked_in ?? false),
             'paymentDenominations' => self::PAYMENT_DENOMINATIONS,
             'paymentEntries' => $paymentEntries,
+            'gcashOrders' => $gcashOrders,
+            'confirmedOrderIds' => $confirmedOrderIds,
         ]);
     }
 
@@ -251,6 +277,7 @@ class StaffMoneyInventoryController extends Controller
             'payment_type' => ['required', 'string', 'in:cash,gcash'],
             'received_amount' => ['nullable', 'numeric', 'min:0'],
             'breakdown' => ['nullable', 'array'],
+            'order_id' => ['nullable', 'integer', 'exists:orders,id'],
         ]);
 
         $paymentType = (string) $validated['payment_type'];
@@ -293,47 +320,47 @@ class StaffMoneyInventoryController extends Controller
             ], 422);
         }
 
-        $reconciledAt = null;
-        $reconciliationRow = DB::table('daily_sales_reconciliations')
-            ->where('user_id', $user->id)
-            ->where('date', $date)
-            ->first(['reconciled_at']);
-        if ($reconciliationRow && $reconciliationRow->reconciled_at) {
-            try {
-                $reconciledAt = Carbon::parse($reconciliationRow->reconciled_at);
-            } catch (\Throwable $e) {
-                $reconciledAt = null;
+        $orderId = $validated['order_id'] ?? null;
+
+        // If order_id is provided, validate against that specific order's amount
+        if ($orderId) {
+            $order = Order::where('id', $orderId)
+                ->where('created_by', $user->id)
+                ->where('payment_type', $paymentType)
+                ->where('status', 'paid')
+                ->whereDate('created_at', $date)
+                ->first();
+
+            if (!$order) {
+                return response()->json([
+                    'message' => 'Order not found or does not match criteria.',
+                    'errors' => [
+                        'order_id' => ['Order not found or does not match criteria.'],
+                    ],
+                ], 422);
             }
+
+            if ((int) $receivedAmount !== (int) $order->total_amount) {
+                return response()->json([
+                    'message' => 'Received amount does not match the order total.',
+                    'errors' => [
+                        'received_amount' => ["Received amount must match order total ({$order->total_amount})."],
+                    ],
+                ], 422);
+            }
+        } else {
+            // Remove strict validation for total daily sales - allow saving working entries
+            // This allows staff to save temporary entries during reconciliation process
+            // Final validation happens when saving Daily Reconciliation
         }
 
-        $basePaidOrders = Order::query()
-            ->where('created_by', $user->id)
-            ->where('status', 'paid')
-            ->whereDate('created_at', $date);
-
-        if ($reconciledAt) {
-            $basePaidOrders->where('created_at', '>', $reconciledAt);
-        }
-
-        $expected = (int) round((float) (clone $basePaidOrders)
-            ->where('payment_type', $paymentType)
-            ->sum('total_amount'));
-
-        if ((int) $receivedAmount !== (int) $expected) {
-            return response()->json([
-                'message' => 'Received amount does not match today\'s total for this payment type.',
-                'errors' => [
-                    'received_amount' => ["Received amount must match today's total ({$expected})."],
-                ],
-            ], 422);
-        }
-
-        $entry = DB::transaction(function () use ($user, $date, $paymentType, $receivedAmount, $cleanBreakdown) {
+        $entry = DB::transaction(function () use ($user, $date, $paymentType, $receivedAmount, $cleanBreakdown, $orderId) {
             $entry = PaymentEntry::create([
                 'user_id' => $user->id,
                 'date' => $date,
                 'payment_type' => $paymentType,
                 'received_amount' => $receivedAmount,
+                'order_id' => $orderId,
             ]);
 
             foreach ($cleanBreakdown as $denom => $qty) {
@@ -356,10 +383,11 @@ class StaffMoneyInventoryController extends Controller
 
         return response()->json([
             'message' => 'Payment entry saved.',
-            'entry' => [
+            'payment_entry' => [
                 'id' => (int) $entry->id,
                 'payment_type' => (string) $entry->payment_type,
                 'received_amount' => (int) $entry->received_amount,
+                'order_id' => (int) $entry->order_id,
                 'created_at' => $entry->created_at?->toIso8601String(),
                 'items' => $entry->items->map(fn (PaymentEntryItem $i) => [
                     'denomination' => (int) $i->denomination,

@@ -16,6 +16,7 @@ class PaymentEntry extends Model
         'date',
         'payment_type',
         'received_amount',
+        'order_id',
     ];
 
     protected $casts = [

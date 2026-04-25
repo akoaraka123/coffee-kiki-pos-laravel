@@ -42,6 +42,140 @@
             </div>
         </div>
 
+        <!-- Money Inventory Section (Read-only for Admin) -->
+        <div class="rounded-2xl border border-white/10 bg-white/5 p-6 shadow-sm">
+            <div class="mb-4">
+                <h3 class="text-lg font-semibold">Money Inventory (Staff Reconciliation)</h3>
+                <p class="mt-1 text-sm text-white/60">Read-only view of staff's money inventory for this date.</p>
+            </div>
+
+            <div class="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-4">
+                <!-- Total Sales -->
+                <div class="rounded-xl border border-purple-500/25 bg-purple-500/10 p-5 shadow-sm">
+                    <div class="text-xs text-purple-200">Total Sales</div>
+                    <div class="mt-2 text-2xl font-bold text-white">₱{{ number_format((float) $totalSales, 2) }}</div>
+                    <div class="mt-1 text-xs text-purple-200/70">System recorded paid orders</div>
+                </div>
+
+                <!-- Cash Sales -->
+                <div class="rounded-xl border border-emerald-500/25 bg-emerald-500/10 p-5 shadow-sm">
+                    <div class="text-xs text-emerald-200">Cash Sales</div>
+                    <div class="mt-2 text-2xl font-bold text-white">₱{{ number_format((float) $cashSalesTotal, 2) }}</div>
+                    <div class="mt-1 text-xs text-emerald-200/70">Expected cash on hand</div>
+                </div>
+
+                <!-- GCash Sales -->
+                <div class="rounded-xl border border-blue-500/25 bg-blue-500/10 p-5 shadow-sm">
+                    <div class="text-xs text-blue-200">GCash Sales</div>
+                    <div class="mt-2 text-2xl font-bold text-white">₱{{ number_format((float) $gcashSalesTotal, 2) }}</div>
+                    <div class="mt-1 text-xs text-blue-200/70">Expected GCash payments</div>
+                </div>
+
+                <!-- Balance Status -->
+                <div class="rounded-xl border border-amber-500/25 bg-amber-500/10 p-5 shadow-sm">
+                    <div class="text-xs text-amber-200">Balance Status</div>
+                    <div class="mt-2 flex items-center gap-2">
+                        <span class="text-2xl font-bold text-white">₱{{ number_format((float) $totalDifference, 2) }}</span>
+                        <span class="rounded-full border px-2 py-0.5 text-xs font-semibold
+                            @class([
+                                'border-emerald-500/30 bg-emerald-500/10 text-emerald-200' => $reconciliationStatus === 'balanced',
+                                'border-rose-500/30 bg-rose-500/10 text-rose-200' => $reconciliationStatus === 'short',
+                                'border-amber-500/30 bg-amber-500/10 text-amber-200' => $reconciliationStatus === 'over',
+                            ])>
+                            {{ ucfirst($reconciliationStatus) }}
+                        </span>
+                    </div>
+                    <div class="mt-1 text-xs text-amber-200/70">
+                        @if($reconciliationStatus === 'balanced') All amounts are matched
+                        @elseif($reconciliationStatus === 'short') Cash/GCash is short
+                        @else Cash/GCash is over
+                        @endif
+                    </div>
+                </div>
+            </div>
+
+            <!-- Reconciliation Details -->
+            <div class="mt-6 grid grid-cols-1 gap-6 lg:grid-cols-2">
+                <!-- Cash Details -->
+                <div class="rounded-xl border border-white/10 bg-black/30 p-4">
+                    <h4 class="text-sm font-semibold text-emerald-200">Cash Reconciliation</h4>
+                    <div class="mt-3 space-y-2">
+                        <div class="flex justify-between text-xs">
+                            <span class="text-white/60">Expected Cash</span>
+                            <span class="text-white/80">₱{{ number_format((float) $cashSalesTotal, 2) }}</span>
+                        </div>
+                        <div class="flex justify-between text-xs">
+                            <span class="text-white/60">Staff Counted Cash</span>
+                            <span class="text-white/80">₱{{ number_format((float) $countedCashTotal, 2) }}</span>
+                        </div>
+                        <div class="flex justify-between text-xs font-medium">
+                            <span class="text-white/80">Difference</span>
+                            <span @class([
+                                'text-rose-300' => $cashDifference < 0,
+                                'text-amber-300' => $cashDifference > 0,
+                                'text-emerald-300' => $cashDifference == 0,
+                            ])>₱{{ number_format(abs($cashDifference), 2) }}</span>
+                        </div>
+                    </div>
+
+                    @if(!empty($denominationBreakdown))
+                    <div class="mt-4 pt-4 border-t border-white/10">
+                        <div class="text-xs font-semibold text-white/60 mb-2">Cash Denomination Breakdown</div>
+                        <div class="grid grid-cols-2 gap-2">
+                            @foreach($denominationBreakdown as $denom => $qty)
+                            @if($qty > 0)
+                            <div class="rounded-lg border border-white/10 bg-white/5 px-3 py-2 text-xs">
+                                <div class="font-semibold">₱{{ number_format($denom) }}</div>
+                                <div class="text-white/60">Qty: {{ $qty }} (₱{{ number_format($denom * $qty) }})</div>
+                            </div>
+                            @endif
+                            @endforeach
+                        </div>
+                    </div>
+                    @endif
+                </div>
+
+                <!-- GCash Details -->
+                <div class="rounded-xl border border-white/10 bg-black/30 p-4">
+                    <h4 class="text-sm font-semibold text-blue-200">GCash Verification</h4>
+                    <div class="mt-3 space-y-2">
+                        <div class="flex justify-between text-xs">
+                            <span class="text-white/60">Expected GCash</span>
+                            <span class="text-white/80">₱{{ number_format((float) $gcashSalesTotal, 2) }}</span>
+                        </div>
+                        <div class="flex justify-between text-xs">
+                            <span class="text-white/60">Staff Verified GCash</span>
+                            <span class="text-white/80">₱{{ number_format((float) $verifiedGcashTotal, 2) }}</span>
+                        </div>
+                        <div class="flex justify-between text-xs font-medium">
+                            <span class="text-white/80">Difference</span>
+                            <span @class([
+                                'text-rose-300' => $gcashDifference < 0,
+                                'text-amber-300' => $gcashDifference > 0,
+                                'text-emerald-300' => $gcashDifference == 0,
+                            ])>₱{{ number_format(abs($gcashDifference), 2) }}</span>
+                        </div>
+                    </div>
+
+                    @if($paymentEntries->where('payment_type', 'gcash')->count() > 0)
+                    <div class="mt-4 pt-4 border-t border-white/10">
+                        <div class="text-xs font-semibold text-white/60 mb-2">GCash Verification Entries</div>
+                        <div class="space-y-2">
+                            @foreach($paymentEntries->where('payment_type', 'gcash') as $entry)
+                            <div class="rounded-lg border border-white/10 bg-white/5 px-3 py-2 text-xs">
+                                <div class="flex justify-between">
+                                    <span class="font-semibold">₱{{ number_format($entry->received_amount) }}</span>
+                                    <span class="text-white/60">{{ $entry->created_at->format('g:i A') }}</span>
+                                </div>
+                            </div>
+                            @endforeach
+                        </div>
+                    </div>
+                    @endif
+                </div>
+            </div>
+        </div>
+
         <div class="space-y-4">
             @forelse ($orders as $order)
                 <div class="rounded-2xl border border-white/10 bg-white/5 p-6 shadow-sm">
