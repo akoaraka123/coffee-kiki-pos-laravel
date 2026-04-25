@@ -191,7 +191,10 @@
                 <input type="hidden" name="payment_type" x-bind:value="paymentType" />
                 <input type="hidden" name="total_amount" x-bind:value="formatPrice(total())" />
                 <input type="hidden" name="cash_received" x-bind:value="paymentType === 'cash' ? cashReceived : ''" />
-                <input type="hidden" name="gcash_reference" x-bind:value="paymentType === 'gcash' ? gcashReference : ''" />
+                <input type="hidden" name="gcash_reference" x-bind:value="paymentType === 'gcash' ? gcashReferenceNumber : ''" />
+                <input type="hidden" name="gcash_sender_name" x-bind:value="paymentType === 'gcash' ? gcashSenderName : ''" />
+                <input type="hidden" name="gcash_sender_mobile" x-bind:value="paymentType === 'gcash' ? gcashSenderMobile : ''" />
+                <input type="hidden" name="gcash_proof_image" x-bind:value="paymentType === 'gcash' ? gcashProofPreview : ''" />
 
                 <div class="space-y-1.5">
                     <label class="text-xs font-semibold text-white/60">Payment Type</label>
@@ -199,7 +202,7 @@
                         <button
                             type="button"
                             class="rounded-xl border px-3 py-2.5 text-sm font-semibold transition"
-                            x-on:click="paymentType = 'cash'"
+                            x-on:click="selectPaymentType('cash')"
                             x-bind:class="paymentType === 'cash' ? 'border-emerald-400/30 bg-emerald-500 text-white shadow-sm' : 'border-white/10 bg-[#111] text-white/80 hover:bg-white/5'"
                         >
                             Cash
@@ -207,13 +210,39 @@
                         <button
                             type="button"
                             class="rounded-xl border px-3 py-2.5 text-sm font-semibold transition"
-                            x-on:click="paymentType = 'gcash'"
+                            x-on:click="selectPaymentType('gcash')"
                             x-bind:class="paymentType === 'gcash' ? 'border-blue-400/30 bg-[#007bff] text-white shadow-sm' : 'border-white/10 bg-[#111] text-white/80 hover:bg-white/5'"
                         >
                             GCash
                         </button>
                     </div>
                 </div>
+
+                <template x-if="paymentType === 'gcash'">
+                    <div class="rounded-xl border border-blue-400/20 bg-blue-500/10 px-3 py-2 text-xs" x-cloak>
+                        <template x-if="!gcashDetailsSaved">
+                            <div class="flex items-center gap-2">
+                                <svg class="h-4 w-4 text-blue-300" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+                                </svg>
+                                <span class="text-blue-200">Please complete GCash payment details before checkout.</span>
+                            </div>
+                        </template>
+                        <template x-if="gcashDetailsSaved">
+                            <div class="flex items-center justify-between">
+                                <div class="flex items-center gap-2">
+                                    <svg class="h-4 w-4 text-emerald-300" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" />
+                                    </svg>
+                                    <span class="text-emerald-200">GCash details saved.</span>
+                                </div>
+                                <button type="button" class="text-xs font-medium text-blue-300 hover:text-blue-200 underline" x-on:click="openGcashModal()">
+                                    Edit
+                                </button>
+                            </div>
+                        </template>
+                    </div>
+                </template>
 
                 <template x-if="paymentType === 'cash'">
                     <div class="space-y-1.5" x-cloak>
@@ -235,18 +264,6 @@
                             </div>
                             <div class="mt-0.5 text-xs text-white/40" x-show="Number(cashReceived || 0) < Number(total() || 0)">Insufficient payment amount.</div>
                         </div>
-                    </div>
-                </template>
-
-                <template x-if="paymentType === 'gcash'">
-                    <div class="space-y-1.5" x-cloak>
-                        <label class="text-xs font-semibold text-white/60">GCash Reference No. (optional)</label>
-                        <input
-                            type="text"
-                            placeholder="Enter GCash reference number"
-                            class="w-full rounded-xl border border-white/10 bg-[#111] px-3 py-2.5 text-sm text-white placeholder:text-white/30 focus:outline-none focus:ring-2 focus:ring-white/20"
-                            x-model="gcashReference"
-                        />
                     </div>
                 </template>
 
@@ -322,6 +339,121 @@
                         Confirm
                     </button>
                 </div>
+                </div>
+            </div>
+        </div>
+    </template>
+
+    <template x-if="gcashModal">
+        <div class="fixed inset-0 z-50">
+            <div class="absolute inset-0 bg-black/70" x-transition.opacity x-on:click="closeGcashModal()"></div>
+            <div class="absolute inset-0 grid place-items-center px-4">
+                <div class="w-full max-w-lg rounded-2xl border border-white/10 bg-[#111] p-6 shadow-2xl max-h-[90vh] overflow-y-auto" x-transition>
+                    <div class="flex items-center justify-between">
+                        <div class="text-lg font-semibold">GCash Payment Details</div>
+                        <button type="button" class="grid h-8 w-8 place-items-center rounded-lg border border-white/10 bg-white/5 text-white/80 hover:bg-white/10" x-on:click="closeGcashModal()">✕</button>
+                    </div>
+                    <div class="mt-1 text-sm text-white/60">Please complete the GCash payment details before checkout.</div>
+
+                    <div class="mt-5 space-y-4">
+                        <div>
+                            <label class="block text-xs font-semibold text-white/60 mb-2">Transaction Proof</label>
+                            <div class="flex flex-col sm:flex-row gap-4">
+                                <div class="flex-1">
+                                    <input
+                                        type="file"
+                                        accept="image/*"
+                                        capture="environment"
+                                        x-on:change="handleGcashProofUpload($event)"
+                                        class="hidden"
+                                        id="gcash-proof-input"
+                                    />
+                                    <button
+                                        type="button"
+                                        x-on:click="document.getElementById('gcash-proof-input').click()"
+                                        class="w-full h-32 rounded-xl border-2 border-dashed border-white/20 bg-white/5 hover:bg-white/10 transition flex flex-col items-center justify-center gap-2"
+                                    >
+                                        <div class="text-2xl">📷</div>
+                                        <div class="text-sm font-medium text-white">Take Picture</div>
+                                        <div class="text-xs text-white/50">or click to upload</div>
+                                        <div class="text-xs text-white/40">PNG, JPG up to 5MB</div>
+                                    </button>
+                                </div>
+                                <template x-if="gcashProofPreview">
+                                    <div class="flex-1 flex flex-col items-center justify-center">
+                                        <div class="relative w-full h-32 rounded-xl border border-white/10 overflow-hidden">
+                                            <img :src="gcashProofPreview" class="w-full h-full object-cover" alt="Transaction proof" />
+                                            <div class="absolute top-2 right-2">
+                                                <div class="h-6 w-6 rounded-full bg-emerald-500 flex items-center justify-center">
+                                                    <svg class="h-4 w-4 text-white" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7" />
+                                                    </svg>
+                                                </div>
+                                            </div>
+                                        </div>
+                                        <button
+                                            type="button"
+                                            x-on:click="removeGcashProof()"
+                                            class="mt-2 text-xs font-medium text-rose-400 hover:text-rose-300"
+                                        >
+                                            Remove
+                                        </button>
+                                    </div>
+                                </template>
+                            </div>
+                        </div>
+
+                        <div>
+                            <label class="block text-xs font-semibold text-white/60 mb-1.5">Reference Number</label>
+                            <input
+                                type="text"
+                                placeholder="Enter GCash reference number"
+                                x-model="gcashReferenceNumber"
+                                class="w-full rounded-xl border border-white/10 bg-[#111] px-3 py-2.5 text-sm text-white placeholder:text-white/30 focus:outline-none focus:ring-2 focus:ring-white/20"
+                            />
+                        </div>
+
+                        <div>
+                            <label class="block text-xs font-semibold text-white/60 mb-1.5">Sender Name <span class="text-rose-400">*</span></label>
+                            <input
+                                type="text"
+                                placeholder="Enter sender name"
+                                x-model="gcashSenderName"
+                                class="w-full rounded-xl border border-white/10 bg-[#111] px-3 py-2.5 text-sm text-white placeholder:text-white/30 focus:outline-none focus:ring-2 focus:ring-white/20"
+                            />
+                        </div>
+
+                        <div>
+                            <label class="block text-xs font-semibold text-white/60 mb-1.5">Sender Mobile Number <span class="text-rose-400">*</span></label>
+                            <input
+                                type="tel"
+                                placeholder="09XXXXXXXXX"
+                                x-model="gcashSenderMobile"
+                                maxlength="11"
+                                class="w-full rounded-xl border border-white/10 bg-[#111] px-3 py-2.5 text-sm text-white placeholder:text-white/30 focus:outline-none focus:ring-2 focus:ring-white/20"
+                            />
+                            <template x-if="gcashSenderMobile && !validatePhilippineMobile(gcashSenderMobile)">
+                                <div class="mt-1 text-xs text-rose-400">Please enter a valid Philippine mobile number (09XXXXXXXXX)</div>
+                            </template>
+                        </div>
+
+                        <template x-if="gcashModalError">
+                            <div class="rounded-xl border border-rose-500/30 bg-rose-500/10 px-4 py-3 text-sm text-rose-200" x-text="gcashModalError"></div>
+                        </template>
+                    </div>
+
+                    <div class="mt-6 flex items-center justify-end gap-3">
+                        <button type="button" class="inline-flex items-center justify-center rounded-xl border border-white/10 bg-white/5 px-4 py-2.5 text-sm font-semibold text-white/80 hover:bg-white/10" x-on:click="closeGcashModal()">
+                            Cancel
+                        </button>
+                        <button
+                            type="button"
+                            class="inline-flex items-center justify-center rounded-xl border border-blue-600/35 bg-[#007bff] px-4 py-2.5 text-sm font-semibold text-white shadow-sm hover:bg-[#0069d9]"
+                            x-on:click="saveGcashDetails()"
+                        >
+                            Save GCash Details
+                        </button>
+                    </div>
                 </div>
             </div>
         </div>

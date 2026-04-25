@@ -179,7 +179,7 @@ class AdminOrderController extends Controller
                 },
             ])
             ->orderBy('created_at')
-            ->get(['id', 'order_number', 'total', 'total_amount', 'payment_type', 'cash_received', 'change_amount', 'status', 'created_at', 'created_by']);
+            ->get(['id', 'order_number', 'total', 'total_amount', 'payment_type', 'cash_received', 'change_amount', 'status', 'created_at', 'created_by', 'gcash_reference', 'gcash_sender_name', 'gcash_sender_mobile', 'gcash_proof_image']);
 
         $totalOrders = $orders->count();
         $totalSales = (float) $orders->sum(fn (Order $o) => (float) ($o->total_amount ?? $o->total ?? 0));
@@ -240,7 +240,7 @@ class AdminOrderController extends Controller
                 },
             ])
             ->orderBy('created_at')
-            ->get(['id', 'order_number', 'total', 'total_amount', 'payment_type', 'cash_received', 'change_amount', 'status', 'created_at', 'created_by']);
+            ->get(['id', 'order_number', 'total', 'total_amount', 'payment_type', 'cash_received', 'change_amount', 'status', 'created_at', 'created_by', 'gcash_reference', 'gcash_sender_name', 'gcash_sender_mobile', 'gcash_proof_image']);
 
         $totalOrders = $orders->count();
         $totalSales = (float) $orders->sum(fn (Order $o) => (float) ($o->total_amount ?? $o->total ?? 0));
@@ -339,6 +339,10 @@ class AdminOrderController extends Controller
             ],
             'orders' => $orders->map(function (Order $o) {
                 $total = (float) ($o->total_amount ?? $o->total ?? 0);
+                $gcashProofImageUrl = null;
+                if ($o->gcash_proof_image) {
+                    $gcashProofImageUrl = \Illuminate\Support\Facades\Storage::disk('public')->url($o->gcash_proof_image);
+                }
                 return [
                     'id' => (int) $o->id,
                     'order_number' => (string) $o->order_number,
@@ -349,6 +353,10 @@ class AdminOrderController extends Controller
                     'cash_received' => $o->cash_received !== null ? (float) $o->cash_received : null,
                     'change_amount' => $o->change_amount !== null ? (float) $o->change_amount : null,
                     'total' => $total,
+                    'gcash_reference' => $o->gcash_reference,
+                    'gcash_sender_name' => $o->gcash_sender_name,
+                    'gcash_sender_mobile' => $o->gcash_sender_mobile,
+                    'gcash_proof_image' => $gcashProofImageUrl,
                     'item_edited_count' => (int) ($o->item_edited_count ?? 0),
                     'item_deleted_count' => (int) ($o->item_deleted_count ?? 0),
                     'items' => $o->items->map(function ($i) {
@@ -399,6 +407,36 @@ class AdminOrderController extends Controller
             'order' => $order,
             'hasEdits' => $hasEdits,
             'hasDeletes' => $hasDeletes,
+        ]);
+    }
+
+    public function deleteTodaySales(Request $request): JsonResponse
+    {
+        $staffId = $request->string('staff')->toString();
+        $staffId = $staffId !== '' ? $staffId : null;
+
+        $today = Carbon::today();
+        $tomorrow = Carbon::tomorrow();
+
+        $query = Order::query()
+            ->where('created_at', '>=', $today)
+            ->where('created_at', '<', $tomorrow);
+
+        if ($staffId) {
+            $query->where('created_by', $staffId);
+        }
+
+        $orders = $query->get(['id']);
+
+        $deletedCount = 0;
+        foreach ($orders as $order) {
+            $order->delete();
+            $deletedCount++;
+        }
+
+        return response()->json([
+            'message' => "Deleted {$deletedCount} orders from today.",
+            'deleted_count' => $deletedCount,
         ]);
     }
 }

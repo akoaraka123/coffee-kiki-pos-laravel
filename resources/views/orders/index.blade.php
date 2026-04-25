@@ -243,6 +243,41 @@
                                 </div>
                             </div>
 
+                            <template x-if="selectedOrder.payment_type === 'gcash'">
+                                <div class="rounded-xl border border-blue-400/20 bg-blue-500/10 p-4">
+                                    <div class="text-sm font-semibold text-blue-200">GCash Payment Details</div>
+                                    <div class="mt-4 grid grid-cols-1 gap-4 sm:grid-cols-2">
+                                        <div>
+                                            <div class="text-xs font-semibold text-white/60">Reference Number</div>
+                                            <div class="mt-1 text-sm font-semibold text-white" x-text="selectedOrder.gcash_reference || '—'"></div>
+                                        </div>
+                                        <div>
+                                            <div class="text-xs font-semibold text-white/60">Sender Name</div>
+                                            <div class="mt-1 text-sm font-semibold text-white" x-text="selectedOrder.gcash_sender_name || '—'"></div>
+                                        </div>
+                                        <div>
+                                            <div class="text-xs font-semibold text-white/60">Sender Mobile Number</div>
+                                            <div class="mt-1 text-sm font-semibold text-white" x-text="selectedOrder.gcash_sender_mobile || '—'"></div>
+                                        </div>
+                                        <div>
+                                            <div class="text-xs font-semibold text-white/60">Transaction Proof</div>
+                                            <div class="mt-1">
+                                                <template x-if="selectedOrder.gcash_proof_image">
+                                                    <div class="flex items-center gap-2">
+                                                        <button type="button" x-on:click="openImagePreview(selectedOrder.gcash_proof_image)" class="inline-flex items-center justify-center rounded-lg border border-blue-400/30 bg-blue-500/20 px-3 py-1.5 text-xs font-semibold text-blue-200 hover:bg-blue-500/30">
+                                                            View Proof
+                                                        </button>
+                                                    </div>
+                                                </template>
+                                                <template x-if="!selectedOrder.gcash_proof_image">
+                                                    <span class="text-sm text-white/60">No proof image available</span>
+                                                </template>
+                                            </div>
+                                        </div>
+                                    </div>
+                                </div>
+                            </template>
+
                             <div class="overflow-hidden rounded-xl border border-white/10">
                                 <table class="min-w-full text-left text-sm">
                                     <thead class="bg-white/5 text-white/70">
@@ -319,6 +354,16 @@
                 </div>
             </div>
 
+            </div>
+        </template>
+
+        <template x-if="imagePreviewOpen">
+            <div class="fixed inset-0 z-[60] flex items-center justify-center px-4">
+                <div class="fixed inset-0 bg-black/80 backdrop-blur-sm" x-transition.opacity x-on:click="closeImagePreview()"></div>
+                <div class="relative w-full max-w-4xl">
+                    <button type="button" class="absolute -top-12 right-0 inline-flex h-10 w-10 items-center justify-center rounded-full border border-white/10 bg-white/5 text-white/80 hover:bg-white/10" x-on:click="closeImagePreview()">✕</button>
+                    <img :src="imagePreviewUrl" class="w-full rounded-xl border border-white/10 shadow-2xl" alt="Transaction Proof" />
+                </div>
             </div>
         </template>
 

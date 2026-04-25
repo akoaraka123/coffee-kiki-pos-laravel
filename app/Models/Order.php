@@ -21,6 +21,10 @@ class Order extends Model
         'cash_received',
         'change_amount',
         'created_by',
+        'gcash_reference',
+        'gcash_sender_name',
+        'gcash_sender_mobile',
+        'gcash_proof_image',
     ];
 
     public function creator(): BelongsTo

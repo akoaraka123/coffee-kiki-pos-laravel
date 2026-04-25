@@ -34,6 +34,14 @@ window.posOrder = function posOrder(initialLayout) {
         successMessage: '',
         productModalOpen: false,
         modalProduct: null,
+        gcashModal: false,
+        gcashReferenceNumber: '',
+        gcashSenderName: '',
+        gcashSenderMobile: '',
+        gcashProofImage: null,
+        gcashProofPreview: null,
+        gcashModalError: '',
+        gcashDetailsSaved: false,
         normalizeCategory(value) {
             return String(value || '')
                 .trim()
@@ -375,6 +383,79 @@ window.posOrder = function posOrder(initialLayout) {
             const n = Number(value || 0);
             return n.toFixed(2);
         },
+        openGcashModal() {
+            this.gcashModal = true;
+            this.gcashModalError = '';
+        },
+        closeGcashModal() {
+            this.gcashModal = false;
+            this.gcashModalError = '';
+        },
+        handleGcashProofUpload(event) {
+            const file = event.target.files[0];
+            if (!file) return;
+
+            if (!file.type.startsWith('image/')) {
+                this.gcashModalError = 'Please select an image file';
+                return;
+            }
+
+            if (file.size > 5 * 1024 * 1024) {
+                this.gcashModalError = 'File size must be less than 5MB';
+                return;
+            }
+
+            const reader = new FileReader();
+            reader.onload = (e) => {
+                this.gcashProofImage = file;
+                this.gcashProofPreview = e.target.result;
+            };
+            reader.readAsDataURL(file);
+        },
+        removeGcashProof() {
+            this.gcashProofImage = null;
+            this.gcashProofPreview = null;
+            document.getElementById('gcash-proof-input').value = '';
+        },
+        validatePhilippineMobile(mobile) {
+            if (!mobile) return false;
+            const cleaned = String(mobile).trim();
+            return /^09\d{9}$/.test(cleaned);
+        },
+        saveGcashDetails() {
+            this.gcashModalError = '';
+
+            if (!this.gcashProofImage && (!this.gcashReferenceNumber || !this.gcashReferenceNumber.trim())) {
+                this.gcashModalError = 'Please upload transaction proof or enter reference number';
+                return;
+            }
+
+            if (!this.gcashSenderName || !this.gcashSenderName.trim()) {
+                this.gcashModalError = 'Please enter sender name';
+                return;
+            }
+
+            if (!this.gcashSenderMobile || !this.gcashSenderMobile.trim()) {
+                this.gcashModalError = 'Please enter sender mobile number';
+                return;
+            }
+
+            if (!this.validatePhilippineMobile(this.gcashSenderMobile)) {
+                this.gcashModalError = 'Please enter a valid Philippine mobile number (09XXXXXXXXX)';
+                return;
+            }
+
+            this.gcashDetailsSaved = true;
+            this.gcashReference = this.gcashReferenceNumber;
+            this.closeGcashModal();
+            this.showToast('GCash details saved successfully');
+        },
+        selectPaymentType(type) {
+            this.paymentType = type;
+            if (type === 'gcash') {
+                this.openGcashModal();
+            }
+        },
         getStockStatus(productId) {
             if (!productId || !this.inventory) return 'in_stock';
             const inv = this.inventory[productId];
@@ -414,6 +495,14 @@ window.posOrder = function posOrder(initialLayout) {
 
                 if (cash < total) {
                     this.checkoutError = 'Insufficient payment amount.';
+                    this.checkoutModal = true;
+                    return;
+                }
+            }
+
+            if (this.paymentType === 'gcash') {
+                if (!this.gcashDetailsSaved) {
+                    this.checkoutError = 'Please complete GCash payment details before checkout.';
                     this.checkoutModal = true;
                     return;
                 }
@@ -479,7 +568,10 @@ window.posOrder = function posOrder(initialLayout) {
                         items: JSON.stringify(this.payloadItems()),
                         payment_type: this.paymentType,
                         cash_received: this.paymentType === 'cash' ? Number(this.cashReceived || 0) : null,
-                        gcash_reference: this.paymentType === 'gcash' ? String(this.gcashReference || '').trim() || null : null,
+                        gcash_reference: this.paymentType === 'gcash' ? String(this.gcashReferenceNumber || '').trim() || null : null,
+                        gcash_sender_name: this.paymentType === 'gcash' ? String(this.gcashSenderName || '').trim() || null : null,
+                        gcash_sender_mobile: this.paymentType === 'gcash' ? String(this.gcashSenderMobile || '').trim() || null : null,
+                        gcash_proof_image: this.paymentType === 'gcash' ? String(this.gcashProofPreview || '').trim() || null : null,
                         total_amount: Number(this.formatPrice(this.total())),
                     }),
                 });
@@ -517,6 +609,8 @@ Alpine.data('orderHistory', () => ({
         quantity: 1,
         note: '',
     },
+    imagePreviewOpen: false,
+    imagePreviewUrl: '',
 
     buildUrl(template, orderId, itemId = null) {
         if (!template) return null;
@@ -739,6 +833,16 @@ Alpine.data('orderHistory', () => ({
         }
     },
 
+    openImagePreview(imageUrl) {
+        this.imagePreviewUrl = imageUrl;
+        this.imagePreviewOpen = true;
+    },
+
+    closeImagePreview() {
+        this.imagePreviewOpen = false;
+        this.imagePreviewUrl = '';
+    },
+
 }));
 
 Alpine.data('adminOrders', () => ({
@@ -747,6 +851,10 @@ Alpine.data('adminOrders', () => ({
     dailyError: '',
     dailyPayload: null,
     detailsJsonUrl: null,
+    expandedOrderId: null,
+    imagePreviewOpen: false,
+    imagePreviewUrl: '',
+    deletingToday: false,
 
     init() {
         this.detailsJsonUrl = this.$el.dataset.detailsJsonUrl || null;
@@ -762,6 +870,57 @@ Alpine.data('adminOrders', () => ({
         this.dailyLoading = false;
         this.dailyError = '';
         this.dailyPayload = null;
+        this.expandedOrderId = null;
+    },
+
+    toggleOrder(orderId) {
+        if (this.expandedOrderId === orderId) {
+            this.expandedOrderId = null;
+        } else {
+            this.expandedOrderId = orderId;
+        }
+    },
+
+    openImagePreview(imageUrl) {
+        this.imagePreviewUrl = imageUrl;
+        this.imagePreviewOpen = true;
+    },
+
+    closeImagePreview() {
+        this.imagePreviewOpen = false;
+        this.imagePreviewUrl = '';
+    },
+
+    async deleteTodaySales(staffId) {
+        if (!confirm('Are you sure you want to delete all orders from today? This action cannot be undone.')) return;
+        this.deletingToday = true;
+        try {
+            const token = document.querySelector('meta[name="csrf-token"]')?.getAttribute('content') || null;
+            if (!token) {
+                alert('Security token not found. Please refresh the page.');
+                return;
+            }
+            const res = await fetch('/admin/orders/delete-today-sales', {
+                method: 'POST',
+                headers: {
+                    'Accept': 'application/json',
+                    'Content-Type': 'application/json',
+                    'X-CSRF-TOKEN': token,
+                },
+                body: JSON.stringify({ staff: staffId || '' }),
+            });
+            const data = await res.json().catch(() => ({}));
+            if (res.ok) {
+                alert(data.message || 'Orders deleted successfully.');
+                window.location.reload();
+            } else {
+                alert('Failed to delete: ' + (data.message || 'Unknown error'));
+            }
+        } catch (e) {
+            alert('Error: ' + e.message);
+        } finally {
+            this.deletingToday = false;
+        }
     },
 
     async openDaily(date, staffId) {

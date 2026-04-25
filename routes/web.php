@@ -40,6 +40,7 @@ Route::prefix('admin')
         Route::get('/orders/details', [AdminOrderController::class, 'details'])->name('orders.details');
         Route::get('/orders/details-json', [AdminOrderController::class, 'detailsJson'])->name('orders.details-json');
         Route::get('/orders/{order}', [AdminOrderController::class, 'show'])->name('orders.show');
+        Route::post('/orders/delete-today-sales', [AdminOrderController::class, 'deleteTodaySales'])->name('orders.delete-today-sales');
 
         Route::get('/products', [AdminProductController::class, 'index'])->name('products.index');
         Route::get('/products/json', [AdminProductController::class, 'indexJson'])->name('products.index-json');

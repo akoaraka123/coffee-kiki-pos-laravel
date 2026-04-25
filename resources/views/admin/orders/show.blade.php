@@ -72,6 +72,38 @@
             </div>
         </div>
 
+        @if ($order->payment_type === 'gcash')
+            <div class="rounded-2xl border border-blue-400/20 bg-blue-500/10 p-6 shadow-sm">
+                <div class="text-sm font-semibold text-blue-200">GCash Payment Details</div>
+                <div class="mt-4 grid grid-cols-1 gap-4 sm:grid-cols-2">
+                    <div>
+                        <div class="text-xs text-white/60">Reference Number</div>
+                        <div class="mt-1 text-sm font-semibold text-white">{{ $order->gcash_reference ?? '—' }}</div>
+                    </div>
+                    <div>
+                        <div class="text-xs text-white/60">Sender Name</div>
+                        <div class="mt-1 text-sm font-semibold text-white">{{ $order->gcash_sender_name ?? '—' }}</div>
+                    </div>
+                    <div>
+                        <div class="text-xs text-white/60">Sender Mobile Number</div>
+                        <div class="mt-1 text-sm font-semibold text-white">{{ $order->gcash_sender_mobile ?? '—' }}</div>
+                    </div>
+                    <div>
+                        <div class="text-xs text-white/60">Transaction Proof</div>
+                        <div class="mt-1">
+                            @if ($order->gcash_proof_image)
+                                <a href="{{ Storage::disk('public')->url($order->gcash_proof_image) }}" target="_blank" class="inline-flex items-center justify-center rounded-lg border border-blue-400/30 bg-blue-500/20 px-3 py-1.5 text-xs font-semibold text-blue-200 hover:bg-blue-500/30">
+                                    View Proof
+                                </a>
+                            @else
+                                <span class="text-sm text-white/60">No proof image available</span>
+                            @endif
+                        </div>
+                    </div>
+                </div>
+            </div>
+        @endif
+
         <div class="rounded-2xl border border-white/10 bg-white/5 p-6 shadow-sm">
             <div class="flex items-center justify-between gap-4">
                 <div>

@@ -190,6 +190,9 @@ class OrderController extends Controller
             'payment_type' => ['required', 'string', 'in:cash,gcash'],
             'cash_received' => ['nullable', 'numeric', 'min:0'],
             'gcash_reference' => ['nullable', 'string', 'max:255'],
+            'gcash_sender_name' => ['nullable', 'string', 'max:255'],
+            'gcash_sender_mobile' => ['nullable', 'string', 'max:11'],
+            'gcash_proof_image' => ['nullable', 'string'],
             'total_amount' => ['required', 'numeric', 'min:0'],
         ]);
 
@@ -343,6 +346,11 @@ class OrderController extends Controller
         $order = null;
 
         DB::transaction(function () use ($request, $validated, $total, $itemsToInsert, $paymentType, $cashReceived, $changeAmount, &$order): void {
+            $gcashProofImagePath = null;
+            if ($paymentType === 'gcash' && !empty($validated['gcash_proof_image'])) {
+                $gcashProofImagePath = $this->saveGcashProofImage($validated['gcash_proof_image']);
+            }
+
             $order = Order::create([
                 'order_number' => $this->generateOrderNumber(),
                 'customer_name' => $validated['customer_name'] ?? null,
@@ -352,6 +360,10 @@ class OrderController extends Controller
                 'payment_type' => $paymentType,
                 'cash_received' => $paymentType === 'cash' ? $cashReceived : null,
                 'change_amount' => $paymentType === 'cash' ? $changeAmount : 0,
+                'gcash_reference' => $paymentType === 'gcash' ? ($validated['gcash_reference'] ?? null) : null,
+                'gcash_sender_name' => $paymentType === 'gcash' ? ($validated['gcash_sender_name'] ?? null) : null,
+                'gcash_sender_mobile' => $paymentType === 'gcash' ? ($validated['gcash_sender_mobile'] ?? null) : null,
+                'gcash_proof_image' => $gcashProofImagePath,
                 'created_by' => $request->user()->id,
             ]);
 
@@ -663,6 +675,11 @@ class OrderController extends Controller
             $statusLabel = $paymentType === 'gcash' ? 'Pay in G-Cash' : 'Pay in Cash';
         }
 
+        $gcashProofImageUrl = null;
+        if ($order->gcash_proof_image) {
+            $gcashProofImageUrl = Storage::disk('public')->url($order->gcash_proof_image);
+        }
+
         return [
             'id' => (int) $order->id,
             'order_number' => (string) $order->order_number,
@@ -677,6 +694,10 @@ class OrderController extends Controller
             'change_amount' => $change,
             'change' => $change,
             'total' => $total,
+            'gcash_reference' => $order->gcash_reference,
+            'gcash_sender_name' => $order->gcash_sender_name,
+            'gcash_sender_mobile' => $order->gcash_sender_mobile,
+            'gcash_proof_image' => $gcashProofImageUrl,
             'items' => $order->activeItems->map(function (OrderItem $i) {
                 return [
                     'id' => (int) $i->id,
@@ -715,5 +736,38 @@ class OrderController extends Controller
         }
 
         $order->save();
+    }
+
+    private function saveGcashProofImage($base64Image): ?string
+    {
+        if (empty($base64Image)) {
+            return null;
+        }
+
+        try {
+            // Remove data URI scheme if present
+            if (preg_match('/^data:image\/(\w+);base64,/', $base64Image, $matches)) {
+                $extension = $matches[1];
+                $base64Image = substr($base64Image, strpos($base64Image, ',') + 1);
+            } else {
+                $extension = 'jpg';
+            }
+
+            $imageData = base64_decode($base64Image);
+            if ($imageData === false) {
+                return null;
+            }
+
+            $filename = 'gcash_proof_' . time() . '_' . uniqid() . '.' . $extension;
+            $path = 'gcash_proofs/' . $filename;
+
+            if (Storage::disk('public')->put($path, $imageData)) {
+                return $path;
+            }
+
+            return null;
+        } catch (\Exception $e) {
+            return null;
+        }
     }
 }
