@@ -51,6 +51,7 @@ class AdminInventoryController extends Controller
             ->where('stock_quantity', '>', 0)
             ->count();
         $outOfStockCount = Inventory::where('stock_quantity', 0)->count();
+        $totalStock = Inventory::sum('stock_quantity');
 
         return view('admin.inventory.index', [
             'inventories' => $inventories,
@@ -60,6 +61,7 @@ class AdminInventoryController extends Controller
             'totalItems' => $totalItems,
             'lowStockCount' => $lowStockCount,
             'outOfStockCount' => $outOfStockCount,
+            'totalStock' => $totalStock,
         ]);
     }
 

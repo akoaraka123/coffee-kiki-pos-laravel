@@ -962,6 +962,7 @@ Alpine.data('adminProductsIndex', () => ({
     searchQuery: '',
     groups: [],
     activeTab: 'all',
+    totalStock: 0,
 
     toastMessage: '',
     toastTimer: null,
@@ -1439,6 +1440,9 @@ Alpine.data('adminProductsIndex', () => ({
             if (Array.isArray(data?.groups)) {
                 this.groups = data.groups;
             }
+            if (typeof data?.totalStock === 'number') {
+                this.totalStock = data.totalStock;
+            }
         } catch (e) {}
     },
 
@@ -1603,6 +1607,795 @@ Alpine.data('adminProductsIndex', () => ({
         }
     },
 }));
+
+Alpine.data('moneyInventory', (payload) => {
+    return {
+        date: payload?.date || '',
+        dateDisplay: payload?.dateDisplay || payload?.date || '',
+        denominations: Array.isArray(payload?.denominations) ? payload.denominations : [],
+        quantities: payload?.quantities || {},
+        initialQuantities: {},
+        saveUrl: payload?.saveUrl || '',
+        saving: false,
+        toastOpen: false,
+        toastMessage: '',
+        errorMessage: '',
+
+        clockedIn: Boolean(payload?.clockedIn ?? false),
+        todaysTotalSales: Number(payload?.todaysTotalSales || 0),
+        todaysCashSales: Number(payload?.todaysCashSales || 0),
+        todaysGcashSales: Number(payload?.todaysGcashSales || 0),
+
+        paymentDenominations: Array.isArray(payload?.paymentDenominations) ? payload.paymentDenominations : [],
+        paymentSaveUrl: payload?.paymentSaveUrl || '',
+        paymentUpdateUrlTemplate: payload?.paymentUpdateUrlTemplate || '',
+        paymentDeleteUrlTemplate: payload?.paymentDeleteUrlTemplate || '',
+        resetTodaysSalesUrl: payload?.resetTodaysSalesUrl || '',
+        paymentType: 'cash',
+        paymentBreakdown: {},
+        initialPaymentBreakdown: {},
+        paymentEntries: Array.isArray(payload?.paymentEntries) ? payload.paymentEntries : [],
+        paymentSaving: false,
+        lowerTodaysTotalSales: Number(payload?.lowerTodaysTotalSales || payload?.todaysTotalSales || 0),
+
+        reconciling: false,
+        reconciled: Boolean(payload?.reconciledToday ?? false),
+        reconciledAt: payload?.reconciledAt || null,
+        undoReconcileUrl: payload?.undoReconcileUrl || '',
+
+        editEntryOpen: false,
+        editEntry: null,
+        editPaymentBreakdown: {},
+        editSaving: false,
+
+        gcashOrders: Array.isArray(payload?.gcashOrders) ? payload.gcashOrders : [],
+        confirmedOrderIds: Array.isArray(payload?.confirmedOrderIds) ? payload.confirmedOrderIds : [],
+        verifiedGcashOrderIds: [],
+
+        init() {
+            console.log('MoneyInventory init payload:', payload);
+            console.log('todaysTotalSales from backend:', payload?.todaysTotalSales);
+            console.log('gcashOrders from backend:', payload?.gcashOrders);
+            console.log('confirmedOrderIds from backend:', payload?.confirmedOrderIds);
+            this.initialQuantities = JSON.parse(JSON.stringify(this.quantities || {}));
+            this.denominations = (this.denominations || []).map(d => Number(d)).filter(d => Number.isFinite(d));
+            this.denominations.sort((a, b) => b - a);
+
+            this.paymentDenominations = (this.paymentDenominations || []).map(d => Number(d)).filter(d => Number.isFinite(d));
+            this.paymentDenominations.sort((a, b) => b - a);
+            this.paymentBreakdown = this.paymentDenominations.reduce((acc, d) => {
+                acc[String(d)] = 0;
+                return acc;
+            }, {});
+            this.initialPaymentBreakdown = JSON.parse(JSON.stringify(this.paymentBreakdown || {}));
+
+            if (!this.clockedIn) {
+                this.showToast(`Total Sales (${this.dateDisplay}): ${this.formatCurrency(this.todaysTotalSales)}`);
+            }
+
+            this.scheduleMidnightRollover();
+            this.startSalesPolling();
+        },
+
+        startSalesPolling() {
+            if (!this.isViewingToday()) return;
+
+            window.clearInterval(this.__salesPoller);
+            this.__salesPoller = window.setInterval(async () => {
+                try {
+                    const url = `${window.location.pathname}?date=${encodeURIComponent(this.date)}`;
+                    const res = await fetch(url, {
+                        method: 'GET',
+                        headers: {
+                            'Accept': 'application/json',
+                            'X-Requested-With': 'XMLHttpRequest',
+                        },
+                    });
+
+                    const data = await res.json().catch(() => ({}));
+                    if (!res.ok) return;
+
+                    const nextTotal = Number(data?.summary?.total_sales || 0);
+                    const nextCash = Number(data?.summary?.cash || 0);
+                    const nextGcash = Number(data?.summary?.gcash || 0);
+                    const nextLower = Number(data?.summary?.lower_total_sales || 0);
+                    const nextReconciled = Boolean(data?.reconciled ?? false);
+                    const nextReconciledAt = data?.reconciled_at ?? null;
+                    const nextDateDisplay = String(data?.date_display || this.dateDisplay || '').trim();
+
+                    const prevTotal = this.todaysTotalSales;
+                    this.todaysTotalSales = nextTotal;
+                    this.todaysCashSales = nextCash;
+                    this.todaysGcashSales = nextGcash;
+                    this.lowerTodaysTotalSales = nextLower;
+                    this.reconciled = nextReconciled;
+                    this.reconciledAt = nextReconciledAt;
+                    this.dateDisplay = nextDateDisplay;
+
+                    if (nextTotal > prevTotal && prevTotal === 0) {
+                        this.showToast(`New sales detected (${this.dateDisplay}). Please record the next transaction.`);
+                    } else if (nextTotal > prevTotal && nextTotal > 0) {
+                        this.showToast(`Sales updated (${this.dateDisplay}): ${this.formatCurrency(nextTotal)}`);
+                    }
+                } catch (e) {
+                    // ignore polling errors
+                }
+            }, 10000);
+        },
+
+        isViewingToday() {
+            const today = new Date().toISOString().split('T')[0];
+            return this.date === today;
+        },
+
+        scheduleMidnightRollover() {
+            if (!this.isViewingToday()) return;
+
+            const now = new Date();
+            const tomorrow = new Date(now);
+            tomorrow.setDate(tomorrow.getDate() + 1);
+            tomorrow.setHours(0, 0, 0, 0);
+
+            const msUntilMidnight = tomorrow - now;
+            if (msUntilMidnight > 0) {
+                this.__midnightTimer = window.setTimeout(() => {
+                    window.location.reload();
+                }, msUntilMidnight);
+            }
+        },
+
+        refreshSalesData() {
+            window.location.reload();
+        },
+
+        setPaymentType(type) {
+            this.paymentType = type;
+            this.resetPayment();
+        },
+
+        paymentQty(d) {
+            return Number(this.paymentBreakdown?.[String(d)] || 0);
+        },
+
+        subtotal(d) {
+            return Number(d) * this.paymentQty(d);
+        },
+
+        subtotalLabel(d) {
+            return `Subtotal: ${this.formatCurrency(this.subtotal(d))}`;
+        },
+
+        total() {
+            return (this.denominations || []).reduce((sum, d) => sum + this.subtotal(d), 0);
+        },
+
+        paymentTotal() {
+            return (this.paymentDenominations || []).reduce((sum, d) => sum + this.subtotal(d), 0);
+        },
+
+        isCashVerified() {
+            const cashSales = this.todaysCashSales || 0;
+            const cashPayments = this.paymentsTotalByTypeAfterCutoff('cash');
+            return cashPayments >= cashSales;
+        },
+
+        isGcashVerified() {
+            const gcashSales = this.todaysGcashSales || 0;
+            const gcashPayments = this.paymentsTotalByTypeAfterCutoff('gcash');
+            return gcashPayments >= gcashSales;
+        },
+
+        paymentsTotalByTypeAfterCutoff(type) {
+            const cutoff = this.reconciledAt ? new Date(this.reconciledAt) : null;
+            return (this.paymentEntries || [])
+                .filter(e => e.payment_type === type && (!cutoff || new Date(e.created_at) > cutoff))
+                .reduce((sum, e) => sum + (Number(e.received_amount) || 0), 0);
+        },
+
+        calculateBalanceDifference() {
+            const cashDiff = this.calculateDifference(this.todaysCashSales, this.paymentsTotalByTypeAfterCutoff('cash'));
+            const gcashDiff = this.calculateDifference(this.todaysGcashSales, this.paymentsTotalByTypeAfterCutoff('gcash'));
+            return cashDiff + gcashDiff;
+        },
+
+        calculateDifference(expected, actual) {
+            return Number(expected || 0) - Number(actual || 0);
+        },
+
+        getBalanceStatusClass() {
+            const diff = this.calculateBalanceDifference();
+            if (diff === 0) return 'bg-emerald-500/20 text-emerald-300';
+            if (diff > 0) return 'bg-amber-500/20 text-amber-300';
+            return 'bg-rose-500/20 text-rose-300';
+        },
+
+        getBalanceStatusText() {
+            const diff = this.calculateBalanceDifference();
+            if (diff === 0) return 'Balanced';
+            if (diff > 0) return 'Short';
+            return 'Over';
+        },
+
+        getBalanceStatusMessage() {
+            const diff = this.calculateBalanceDifference();
+            if (diff === 0) return 'Cash/GCash is balanced';
+            if (diff > 0) return 'Cash/GCash is short';
+            return 'Cash/GCash is over';
+        },
+
+        getDifferenceClass(expected, actual) {
+            const diff = this.calculateDifference(expected, actual);
+            if (diff === 0) return 'text-emerald-400';
+            if (diff > 0) return 'text-amber-400';
+            return 'text-rose-400';
+        },
+
+        formatCurrency(value) {
+            const n = Number(value || 0);
+            return `₱${n.toLocaleString(undefined, { minimumFractionDigits: 0, maximumFractionDigits: 0 })}`;
+        },
+
+        formatEntryTime(iso) {
+            if (!iso) return '';
+            const d = new Date(iso);
+            return d.toLocaleTimeString(undefined, { hour: '2-digit', minute: '2-digit' });
+        },
+
+        formatDisplayDate(dateStr) {
+            if (!dateStr) return '';
+            return String(dateStr);
+        },
+
+        formatDenomination(d) {
+            const denom = Number(d);
+            return `₱${denom.toLocaleString()}`;
+        },
+
+        setPaymentQty(d, value) {
+            const key = String(d);
+            const n = Number(value);
+            if (!Number.isFinite(n) || n < 0) return;
+            this.paymentBreakdown[key] = n;
+        },
+
+        addPaymentDenomination(d) {
+            const q = this.paymentQty(d);
+            this.setPaymentQty(d, q + 1);
+        },
+
+        removePaymentDenomination(d) {
+            const q = this.paymentQty(d);
+            this.setPaymentQty(d, q - 1);
+        },
+
+        verifyGcashOrder(orderId) {
+            const id = Number(orderId);
+            if (this.verifiedGcashOrderIds.includes(id)) {
+                this.verifiedGcashOrderIds = this.verifiedGcashOrderIds.filter(oid => oid !== id);
+            } else {
+                this.verifiedGcashOrderIds.push(id);
+            }
+        },
+
+        confirmAllGcashOrders() {
+            this.verifiedGcashOrderIds = this.gcashOrders.map(o => o.id);
+        },
+
+        setEditQty(d, value) {
+            const key = String(d);
+            const n = Number(value);
+            if (!Number.isFinite(n) || n < 0) return;
+            this.editPaymentBreakdown[key] = n;
+        },
+
+        editIncrement(d) {
+            const q = this.editQty(d);
+            this.setEditQty(d, q + 1);
+        },
+
+        editDecrement(d) {
+            const q = this.editQty(d);
+            this.setEditQty(d, q - 1);
+        },
+
+        resetPayment() {
+            this.errorMessage = '';
+            this.paymentBreakdown = JSON.parse(JSON.stringify(this.initialPaymentBreakdown || {}));
+            this.gcashAmount = '';
+        },
+
+        async saveMain() {
+            this.errorMessage = '';
+            if (this.paymentSaving) return;
+
+            // Check if payment type is verified before allowing save
+            if (this.paymentType === 'cash' && !this.isCashVerified()) {
+                this.errorMessage = 'Please verify all Cash payments before saving.';
+                return;
+            }
+            if (this.paymentType === 'gcash' && !this.isGcashVerified()) {
+                this.errorMessage = 'Please verify all GCash payments before saving.';
+                return;
+            }
+
+            // If verified, build the received amount from expected totals
+            const token = document.querySelector('meta[name="csrf-token"]')?.getAttribute('content') || null;
+            if (!token) {
+                this.errorMessage = 'Security token not found. Please refresh the page and try again.';
+                return;
+            }
+
+            let receivedAmount = 0;
+            let breakdown = {};
+
+            if (this.paymentType === 'cash') {
+                // Use expected cash sales as received amount
+                receivedAmount = this.todaysCashSales || 0;
+                // Build breakdown from expected cash
+                breakdown = this.buildCashBreakdownFromExpected(receivedAmount);
+            } else if (this.paymentType === 'gcash') {
+                // Use expected gcash sales as received amount
+                receivedAmount = this.todaysGcashSales || 0;
+            }
+
+            if (!Number.isFinite(receivedAmount) || receivedAmount <= 0) {
+                this.errorMessage = 'No sales to save for this payment type.';
+                return;
+            }
+
+            this.paymentSaving = true;
+            try {
+                const res = await fetch(this.paymentSaveUrl, {
+                    method: 'POST',
+                    headers: {
+                        'Accept': 'application/json',
+                        'Content-Type': 'application/json',
+                        'X-Requested-With': 'XMLHttpRequest',
+                        'X-CSRF-TOKEN': token,
+                    },
+                    body: JSON.stringify({
+                        date: this.date,
+                        payment_type: this.paymentType,
+                        received_amount: receivedAmount,
+                        breakdown,
+                    }),
+                });
+
+                const data = await res.json().catch(() => ({}));
+                if (!res.ok) {
+                    const firstError = data?.errors ? Object.values(data.errors)[0]?.[0] : null;
+                    this.errorMessage = firstError || data?.message || 'Failed to save payment entry.';
+                    return;
+                }
+
+                const entry = data?.payment_entry || data?.entry || null;
+                if (entry) {
+                    this.paymentEntries = [entry, ...(Array.isArray(this.paymentEntries) ? this.paymentEntries : [])];
+                }
+
+                // Reset today's sales after saving payment entry
+                await this.resetTodaysSales();
+
+                this.resetPayment();
+                this.showToast(data?.message || 'Payment entry saved.');
+            } catch (e) {
+                this.errorMessage = 'Failed to save payment entry. Please check your connection and try again.';
+            } finally {
+                this.paymentSaving = false;
+            }
+        },
+
+        buildCashBreakdownFromExpected(amount) {
+            // Simple breakdown: use largest denominations first
+            const denominations = [1000, 500, 200, 100, 50, 20, 10, 5, 1];
+            const breakdown = {};
+            let remaining = amount;
+
+            for (const denom of denominations) {
+                if (remaining >= denom) {
+                    const count = Math.floor(remaining / denom);
+                    breakdown[String(denom)] = count;
+                    remaining -= count * denom;
+                } else {
+                    breakdown[String(denom)] = 0;
+                }
+            }
+
+            return breakdown;
+        },
+
+        async savePaymentEntry() {
+            this.errorMessage = '';
+            if (!this.paymentSaveUrl) {
+                this.errorMessage = 'Payment save endpoint not configured.';
+                return;
+            }
+            if (this.paymentSaving) return;
+
+            const token = document.querySelector('meta[name="csrf-token"]')?.getAttribute('content') || null;
+            if (!token) {
+                this.errorMessage = 'Security token not found. Please refresh the page and try again.';
+                return;
+            }
+
+            const breakdown = this.paymentBreakdown || {};
+            const breakdownTotal = this.paymentTotal();
+            const gcashInput = String(this.gcashAmount || '').trim();
+
+            let receivedAmount = null;
+            if (this.paymentType === 'gcash' && gcashInput !== '') {
+                const n = Number(gcashInput);
+                if (Number.isFinite(n) && n >= 0) {
+                    receivedAmount = Math.floor(n);
+                }
+            }
+
+            if (receivedAmount === null) {
+                receivedAmount = breakdownTotal;
+            }
+
+            if (!Number.isFinite(receivedAmount) || receivedAmount <= 0) {
+                this.errorMessage = 'Please enter or build a received amount.';
+                return;
+            }
+
+            // Remove strict validation - allow saving even if amount doesn't match expected total
+            // This allows staff to save working entries during reconciliation process
+
+            this.paymentSaving = true;
+            try {
+                const res = await fetch(this.paymentSaveUrl, {
+                    method: 'POST',
+                    headers: {
+                        'Accept': 'application/json',
+                        'Content-Type': 'application/json',
+                        'X-Requested-With': 'XMLHttpRequest',
+                        'X-CSRF-TOKEN': token,
+                    },
+                    body: JSON.stringify({
+                        date: this.date,
+                        payment_type: this.paymentType,
+                        received_amount: receivedAmount,
+                        breakdown,
+                    }),
+                });
+
+                const data = await res.json().catch(() => ({}));
+                if (!res.ok) {
+                    const firstError = data?.errors ? Object.values(data.errors)[0]?.[0] : null;
+                    this.errorMessage = firstError || data?.message || 'Failed to save payment entry.';
+                    return;
+                }
+
+                const entry = data?.payment_entry || data?.entry || null;
+                if (entry) {
+                    this.paymentEntries = [entry, ...(Array.isArray(this.paymentEntries) ? this.paymentEntries : [])];
+                }
+
+                this.resetPayment();
+                this.showToast(data?.message || 'Payment entry saved.');
+            } catch (e) {
+                this.errorMessage = 'Failed to save payment entry. Please check your connection and try again.';
+            } finally {
+                this.paymentSaving = false;
+            }
+        },
+
+        async resetTodaysSales() {
+            if (!this.resetTodaysSalesUrl) {
+                this.errorMessage = 'Reset endpoint not configured.';
+                return;
+            }
+
+            const token = document.querySelector('meta[name="csrf-token"]')?.getAttribute('content') || null;
+            if (!token) {
+                this.errorMessage = 'Security token not found. Please refresh the page and try again.';
+                return;
+            }
+
+            try {
+                const res = await fetch(this.resetTodaysSalesUrl, {
+                    method: 'POST',
+                    headers: {
+                        'Accept': 'application/json',
+                        'Content-Type': 'application/json',
+                        'X-Requested-With': 'XMLHttpRequest',
+                        'X-CSRF-TOKEN': token,
+                    },
+                    body: JSON.stringify({
+                        payment_type: this.paymentType,
+                    }),
+                });
+
+                const data = await res.json().catch(() => ({}));
+                if (!res.ok) {
+                    this.errorMessage = data?.message || 'Failed to reset today\'s sales.';
+                    return;
+                }
+
+                await this.refreshSalesData();
+                this.showToast(data?.message || 'Today\'s sales reset.');
+            } catch (e) {
+                this.errorMessage = 'Failed to reset today\'s sales. Please check your connection and try again.';
+            }
+        },
+
+        async saveGcashVerification() {
+            if (this.verifiedGcashOrderIds.length === 0) {
+                this.errorMessage = 'Please verify at least one GCash transaction.';
+                return;
+            }
+
+            this.paymentSaving = true;
+            try {
+                const verifiedOrders = this.gcashOrders.filter(o => this.verifiedGcashOrderIds.includes(o.id));
+
+                // Create a payment entry for each verified GCash order
+                for (const order of verifiedOrders) {
+                    const res = await fetch(this.paymentSaveUrl, {
+                        method: 'POST',
+                        headers: {
+                            'Accept': 'application/json',
+                            'Content-Type': 'application/json',
+                            'X-Requested-With': 'XMLHttpRequest',
+                            'X-CSRF-TOKEN': document.querySelector('meta[name="csrf-token"]')?.getAttribute('content') || '',
+                        },
+                        body: JSON.stringify({
+                            date: this.date,
+                            payment_type: 'gcash',
+                            received_amount: order.total_amount,
+                            breakdown: {},
+                            order_id: order.id,
+                        }),
+                    });
+
+                    if (!res.ok) {
+                        const data = await res.json().catch(() => ({}));
+                        this.errorMessage = data?.message || 'Failed to save GCash verification.';
+                        this.paymentSaving = false;
+                        return;
+                    }
+
+                    const data = await res.json();
+                    const savedEntry = data?.payment_entry;
+
+                    if (savedEntry) {
+                        // Add the saved entry to paymentEntries at the beginning with GCash details
+                        const newEntry = {
+                            id: savedEntry.id,
+                            payment_type: 'gcash',
+                            received_amount: savedEntry.received_amount,
+                            created_at: savedEntry.created_at,
+                            order_id: savedEntry.order_id,
+                            items: savedEntry.items || [],
+                            gcash_details: {
+                                sender_name: order.gcash_sender_name || '',
+                                gcash_reference: order.gcash_reference || '',
+                                gcash_sender_mobile: order.gcash_sender_mobile || '',
+                                order_number: order.order_number || '',
+                                items: order.items || [],
+                            },
+                        };
+                        this.paymentEntries = [newEntry, ...this.paymentEntries];
+                    }
+                }
+
+                this.verifiedGcashOrderIds = [];
+                this.showToast('GCash verification saved successfully.');
+            } catch (e) {
+                this.errorMessage = 'Failed to save GCash verification.';
+            } finally {
+                this.paymentSaving = false;
+            }
+        },
+
+        verifiedGcashTotal() {
+            return this.gcashOrders
+                .filter(o => this.verifiedGcashOrderIds.includes(o.id))
+                .reduce((sum, o) => sum + (Number(o.total_amount) || 0), 0);
+        },
+
+        editPaymentTotal() {
+            return (this.paymentDenominations || []).reduce((sum, d) => sum + (Number(d) * this.editQty(d)), 0);
+        },
+
+        async saveEditEntry() {
+            this.errorMessage = '';
+            if (!this.editEntry || !this.paymentUpdateUrlTemplate) {
+                this.errorMessage = 'Edit endpoint not configured.';
+                return;
+            }
+            if (this.editSaving) return;
+
+            const token = document.querySelector('meta[name="csrf-token"]')?.getAttribute('content') || null;
+            if (!token) {
+                this.errorMessage = 'Security token not found. Please refresh the page and try again.';
+                return;
+            }
+
+            const url = this.paymentUpdateUrlTemplate.replace('__ENTRY__', this.editEntry.id);
+            const breakdown = this.editPaymentBreakdown || {};
+            const total = this.editPaymentTotal();
+
+            this.editSaving = true;
+            try {
+                const res = await fetch(url, {
+                    method: 'PUT',
+                    headers: {
+                        'Accept': 'application/json',
+                        'Content-Type': 'application/json',
+                        'X-Requested-With': 'XMLHttpRequest',
+                        'X-CSRF-TOKEN': token,
+                    },
+                    body: JSON.stringify({
+                        received_amount: total,
+                        breakdown,
+                    }),
+                });
+
+                const data = await res.json().catch(() => ({}));
+                if (!res.ok) {
+                    const firstError = data?.errors ? Object.values(data.errors)[0]?.[0] : null;
+                    this.errorMessage = firstError || data?.message || 'Failed to update payment entry.';
+                    return;
+                }
+
+                const updated = data?.payment_entry || data?.entry || null;
+                if (updated) {
+                    const idx = this.paymentEntries.findIndex(e => e.id === this.editEntry.id);
+                    if (idx >= 0) {
+                        this.paymentEntries[idx] = updated;
+                    }
+                }
+
+                this.closeEditEntry();
+                this.showToast(data?.message || 'Payment entry updated.');
+            } catch (e) {
+                this.errorMessage = 'Failed to update payment entry. Please check your connection and try again.';
+            } finally {
+                this.editSaving = false;
+            }
+        },
+
+        editQty(d) {
+            return Number(this.editPaymentBreakdown?.[String(d)] || 0);
+        },
+
+        openEditEntry(entry) {
+            this.errorMessage = '';
+            this.editEntry = entry;
+            const base = this.paymentDenominations.reduce((acc, d) => {
+                acc[String(d)] = 0;
+                return acc;
+            }, {});
+
+            if (Array.isArray(entry?.items)) {
+                entry.items.forEach(item => {
+                    const denom = String(item.denomination);
+                    const qty = Number(item.quantity || 0);
+                    if (base.hasOwnProperty(denom)) {
+                        base[denom] = qty;
+                    }
+                });
+            }
+
+            this.editPaymentBreakdown = base;
+            this.editEntryOpen = true;
+            this.showToast(`Today's Total Sales: ${this.formatCurrency(this.todaysTotalSales)}`);
+        },
+
+        closeEditEntry() {
+            this.editEntryOpen = false;
+            this.editEntry = null;
+            this.editPaymentBreakdown = {};
+        },
+
+        async deleteEntry(entry) {
+            if (!confirm('Delete this payment entry?')) return;
+
+            const url = this.paymentDeleteUrlTemplate.replace('__ENTRY__', entry.id);
+            const token = document.querySelector('meta[name="csrf-token"]')?.getAttribute('content') || null;
+            if (!token) {
+                this.errorMessage = 'Security token not found. Please refresh the page and try again.';
+                return;
+            }
+
+            try {
+                const res = await fetch(url, {
+                    method: 'DELETE',
+                    headers: {
+                        'Accept': 'application/json',
+                        'X-Requested-With': 'XMLHttpRequest',
+                        'X-CSRF-TOKEN': token,
+                    },
+                });
+
+                if (!res.ok) {
+                    const data = await res.json().catch(() => ({}));
+                    this.errorMessage = data?.message || 'Failed to delete payment entry.';
+                    return;
+                }
+
+                this.paymentEntries = this.paymentEntries.filter(e => e.id !== entry.id);
+                this.showToast('Payment entry deleted.');
+            } catch (e) {
+                this.errorMessage = 'Failed to delete payment entry. Please check your connection and try again.';
+            }
+        },
+
+        reset() {
+            this.errorMessage = '';
+            // Only allow reset if there are no sales today; otherwise preserve current quantities
+            if (this.todaysTotalSales > 0) {
+                this.showToast('Cannot reset while today\'s sales are recorded.');
+                return;
+            }
+            this.quantities = JSON.parse(JSON.stringify(this.initialQuantities || {}));
+        },
+
+        showToast(message) {
+            this.toastMessage = String(message || '').trim();
+            this.toastOpen = true;
+            window.clearTimeout(this.__toastTimer);
+            this.__toastTimer = window.setTimeout(() => {
+                this.toastOpen = false;
+            }, 2000);
+        },
+
+        async save() {
+            this.errorMessage = '';
+            if (!this.saveUrl) {
+                this.errorMessage = 'Save endpoint not configured.';
+                return;
+            }
+            if (this.saving) return;
+
+            const token = document.querySelector('meta[name="csrf-token"]')?.getAttribute('content') || null;
+            if (!token) {
+                this.errorMessage = 'Security token not found. Please refresh the page and try again.';
+                return;
+            }
+
+            this.saving = true;
+            try {
+                const res = await fetch(this.saveUrl, {
+                    method: 'POST',
+                    headers: {
+                        'Accept': 'application/json',
+                        'Content-Type': 'application/json',
+                        'X-Requested-With': 'XMLHttpRequest',
+                        'X-CSRF-TOKEN': token,
+                    },
+                    body: JSON.stringify({
+                        date: this.date,
+                        quantities: this.quantities || {},
+                    }),
+                });
+
+                const data = await res.json().catch(() => ({}));
+                if (!res.ok) {
+                    const firstError = data?.errors ? Object.values(data.errors)[0]?.[0] : null;
+                    this.errorMessage = firstError || data?.message || 'Failed to save money inventory.';
+                    return;
+                }
+
+                // Only update initialQuantities if there are no sales; otherwise preserve current quantities
+                if (this.todaysTotalSales <= 0) {
+                    this.initialQuantities = JSON.parse(JSON.stringify(this.quantities || {}));
+                }
+
+                // Reset today's sales after saving money inventory
+                await this.resetTodaysSales();
+
+                this.showToast(data?.message || 'Money inventory saved.');
+            } catch (e) {
+                this.errorMessage = 'Failed to save money inventory. Please check your connection and try again.';
+            } finally {
+                this.saving = false;
+            }
+        },
+    };
+});
 
 try {
     Alpine.start();

@@ -45,11 +45,14 @@ class StaffInventoryController extends Controller
             ->orderBy('category')
             ->pluck('category');
 
+        $totalStock = Inventory::sum('stock_quantity');
+
         return view('staff.inventory.index', [
             'inventories' => $inventories,
             'categories' => $categories,
             'selectedCategory' => $category,
             'search' => $search,
+            'totalStock' => $totalStock,
         ]);
     }
 

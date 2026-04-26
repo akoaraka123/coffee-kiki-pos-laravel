@@ -89,6 +89,10 @@
                 <h2 class="text-xl font-semibold">Inventory Management</h2>
                 <p class="mt-1 text-sm text-white/50">View stock levels and add inventory.</p>
             </div>
+            <div class="rounded-xl border border-emerald-600/50 bg-emerald-600/10 px-6 py-3">
+                <p class="text-sm text-white/60">Total Stock</p>
+                <p class="text-2xl font-semibold text-emerald-400">{{ number_format($totalStock ?? 0) }}</p>
+            </div>
         </div>
 
         <div class="rounded-xl border border-white/10 bg-white/5 p-5 shadow-sm">

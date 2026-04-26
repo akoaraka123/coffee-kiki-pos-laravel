@@ -46,6 +46,7 @@
                 <div>
                     <div class="text-sm font-semibold">Menu</div>
                     <div class="mt-1 text-xs text-white/50">Select items to add to the order.</div>
+                    <div class="mt-1 text-xs text-emerald-400">Total Stock: {{ number_format($totalStock ?? 0) }}</div>
                 </div>
 
                 <a href="{{ route('orders.index') }}" class="inline-flex items-center justify-center rounded-xl border border-white/10 bg-white/5 px-4 py-2 text-sm font-medium text-white/80 hover:bg-white/10">

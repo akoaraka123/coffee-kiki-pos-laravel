@@ -8,6 +8,7 @@
             <div>
                 <h2 class="text-xl font-semibold">Products</h2>
                 <p class="mt-1 text-sm text-white/50">Create, edit, and remove products shown in the POS menu.</p>
+                <p class="mt-1 text-xs text-emerald-400" x-text="'Total Stock: ' + totalStock.toLocaleString()"></p>
             </div>
 
             <div class="relative z-10 flex items-center gap-3">

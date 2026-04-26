@@ -3,6 +3,7 @@
 namespace App\Http\Controllers\Admin;
 
 use App\Http\Controllers\Controller;
+use App\Models\Inventory;
 use App\Models\Product;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\RedirectResponse;
@@ -49,8 +50,11 @@ class AdminProductController extends Controller
             })
             ->values();
 
+        $totalStock = Inventory::sum('stock_quantity');
+
         return view('admin.products.index', [
             'groups' => $groups,
+            'totalStock' => $totalStock,
         ]);
     }
 
@@ -89,8 +93,11 @@ class AdminProductController extends Controller
             })
             ->values();
 
+        $totalStock = Inventory::sum('stock_quantity');
+
         return response()->json([
             'groups' => $groups,
+            'totalStock' => $totalStock,
         ]);
     }
 

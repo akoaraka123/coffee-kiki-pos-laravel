@@ -11,6 +11,7 @@ use Illuminate\Http\JsonResponse;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Schema;
 use Illuminate\View\View;
 
 class StaffMoneyInventoryController extends Controller
@@ -499,30 +500,82 @@ class StaffMoneyInventoryController extends Controller
 
         $user = $request->user();
         $today = Carbon::today()->toDateString();
+        $paymentType = $request->input('payment_type', 'all'); // 'cash', 'gcash', or 'all'
 
         $reconciledAt = now();
 
-        // Option 1: Mark orders as 'reconciled' or add a flag so they are excluded from todaysTotalSales
-        // For now, we'll create a simple reconciliation record to prevent double-counting
-        DB::table('daily_sales_reconciliations')->updateOrInsert(
-            [
-                'user_id' => $user->id,
-                'date' => $today,
-            ],
-            [
-                'reconciled_at' => $reconciledAt,
-                'total_sales' => Order::query()
-                    ->where('created_by', $user->id)
-                    ->where('status', 'paid')
-                    ->whereDate('created_at', $today)
-                    ->where('created_at', '<=', $reconciledAt)
-                    ->sum('total_amount'),
-            ]
-        );
+        // Check if reconciliation_data column exists
+        $hasReconciliationDataColumn = Schema::hasColumn('daily_sales_reconciliations', 'reconciliation_data');
+
+        if ($hasReconciliationDataColumn) {
+            // Store reconciliation data with payment type in JSON
+            $reconciliationData = [
+                'reconciled_at' => $reconciledAt->toIso8601String(),
+                'payment_type' => $paymentType,
+            ];
+
+            // Get existing reconciliation data
+            $existing = DB::table('daily_sales_reconciliations')
+                ->where('user_id', $user->id)
+                ->where('date', $today)
+                ->first();
+
+            if ($existing) {
+                // Merge with existing data
+                $existingData = json_decode($existing->reconciliation_data ?? '{}', true);
+                $existingData[$paymentType] = $reconciliationData;
+
+                DB::table('daily_sales_reconciliations')
+                    ->where('user_id', $user->id)
+                    ->where('date', $today)
+                    ->update([
+                        'reconciled_at' => $reconciledAt,
+                        'reconciliation_data' => json_encode($existingData),
+                        'total_sales' => Order::query()
+                            ->where('created_by', $user->id)
+                            ->where('status', 'paid')
+                            ->whereDate('created_at', $today)
+                            ->where('created_at', '<=', $reconciledAt)
+                            ->sum('total_amount'),
+                    ]);
+            } else {
+                // Create new record
+                DB::table('daily_sales_reconciliations')->insert([
+                    'user_id' => $user->id,
+                    'date' => $today,
+                    'reconciled_at' => $reconciledAt,
+                    'reconciliation_data' => json_encode([$paymentType => $reconciliationData]),
+                    'total_sales' => Order::query()
+                        ->where('created_by', $user->id)
+                        ->where('status', 'paid')
+                        ->whereDate('created_at', $today)
+                        ->where('created_at', '<=', $reconciledAt)
+                        ->sum('total_amount'),
+                ]);
+            }
+        } else {
+            // Fallback: use old behavior (single reconciliation for all)
+            DB::table('daily_sales_reconciliations')->updateOrInsert(
+                [
+                    'user_id' => $user->id,
+                    'date' => $today,
+                ],
+                [
+                    'reconciled_at' => $reconciledAt,
+                    'total_sales' => Order::query()
+                        ->where('created_by', $user->id)
+                        ->where('status', 'paid')
+                        ->whereDate('created_at', $today)
+                        ->where('created_at', '<=', $reconciledAt)
+                        ->sum('total_amount'),
+                ]
+            );
+        }
 
         return response()->json([
             'message' => 'Today\'s sales reconciled.',
             'reconciled_at' => $reconciledAt?->toIso8601String(),
+            'payment_type' => $paymentType,
         ]);
     }
 

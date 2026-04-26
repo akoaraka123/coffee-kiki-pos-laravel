@@ -43,8 +43,14 @@
                 'gcash_reference' => (string) ($o->gcash_reference ?? ''),
                 'gcash_sender_name' => (string) ($o->gcash_sender_name ?? ''),
                 'gcash_sender_mobile' => (string) ($o->gcash_sender_mobile ?? ''),
+                'items' => ($o->items ?? collect())->map(fn ($i) => [
+                    'product_name' => (string) ($i->product_name ?? ''),
+                    'size' => (string) ($i->size ?? ''),
+                    'quantity' => (int) $i->quantity,
+                    'price' => (int) $i->price,
+                ])->values()->all(),
             ])->values()->all()),
-            confirmedOrderIds: @js($confirmedOrderIds ?? []),
+            confirmedOrderIds: @js(is_array($confirmedOrderIds ?? []) ? ($confirmedOrderIds ?? []) : ($confirmedOrderIds ?? collect())->values()->all()),
         })"
         x-init="init()"
     >
@@ -73,11 +79,11 @@
                 <button
                     type="button"
                     class="inline-flex items-center justify-center rounded-xl bg-[#efe9df] px-4 py-2 text-sm font-semibold text-[#1c1c1c] shadow-sm hover:opacity-95 disabled:opacity-60"
-                    x-on:click="savePaymentEntry()"
-                    x-bind:disabled="paymentSaving"
+                    x-on:click="save()"
+                    x-bind:disabled="saving"
                 >
-                    <span x-show="!paymentSaving">Save</span>
-                    <span x-show="paymentSaving" x-cloak>Saving...</span>
+                    <span x-show="!saving">Save</span>
+                    <span x-show="saving" x-cloak>Saving...</span>
                 </button>
             </div>
         </div>
@@ -920,6 +926,9 @@
                                 'X-Requested-With': 'XMLHttpRequest',
                                 'X-CSRF-TOKEN': token,
                             },
+                            body: JSON.stringify({
+                                payment_type: this.paymentType, // 'cash' or 'gcash'
+                            }),
                         });
 
                         if (res.ok) {
@@ -1433,6 +1442,106 @@
                     this.errorMessage = '';
                     this.paymentBreakdown = JSON.parse(JSON.stringify(this.initialPaymentBreakdown || {}));
                     this.gcashAmount = '';
+                },
+
+                async saveMain() {
+                    this.errorMessage = '';
+                    if (this.paymentSaving) return;
+
+                    // Check if payment type is verified before allowing save
+                    if (this.paymentType === 'cash' && !this.isCashVerified()) {
+                        this.errorMessage = 'Please verify all Cash payments before saving.';
+                        return;
+                    }
+                    if (this.paymentType === 'gcash' && !this.isGcashVerified()) {
+                        this.errorMessage = 'Please verify all GCash payments before saving.';
+                        return;
+                    }
+
+                    // If verified, build the received amount from expected totals
+                    const token = document.querySelector('meta[name="csrf-token']')?.getAttribute('content') || null;
+                    if (!token) {
+                        this.errorMessage = 'Security token not found. Please refresh the page and try again.';
+                        return;
+                    }
+
+                    let receivedAmount = 0;
+                    let breakdown = {};
+
+                    if (this.paymentType === 'cash') {
+                        // Use expected cash sales as received amount
+                        receivedAmount = this.todaysCashSales || 0;
+                        // Build breakdown from expected cash
+                        breakdown = this.buildCashBreakdownFromExpected(receivedAmount);
+                    } else if (this.paymentType === 'gcash') {
+                        // Use expected gcash sales as received amount
+                        receivedAmount = this.todaysGcashSales || 0;
+                    }
+
+                    if (!Number.isFinite(receivedAmount) || receivedAmount <= 0) {
+                        this.errorMessage = 'No sales to save for this payment type.';
+                        return;
+                    }
+
+                    this.paymentSaving = true;
+                    try {
+                        const res = await fetch(this.paymentSaveUrl, {
+                            method: 'POST',
+                            headers: {
+                                'Accept': 'application/json',
+                                'Content-Type': 'application/json',
+                                'X-Requested-With': 'XMLHttpRequest',
+                                'X-CSRF-TOKEN': token,
+                            },
+                            body: JSON.stringify({
+                                date: this.date,
+                                payment_type: this.paymentType,
+                                received_amount: receivedAmount,
+                                breakdown,
+                            }),
+                        });
+
+                        const data = await res.json().catch(() => ({}));
+                        if (!res.ok) {
+                            const firstError = data?.errors ? Object.values(data.errors)[0]?.[0] : null;
+                            this.errorMessage = firstError || data?.message || 'Failed to save payment entry.';
+                            return;
+                        }
+
+                        const entry = data?.payment_entry || data?.entry || null;
+                        if (entry) {
+                            this.paymentEntries = [entry, ...(Array.isArray(this.paymentEntries) ? this.paymentEntries : [])];
+                        }
+
+                        // Reset today's sales after saving payment entry
+                        await this.resetTodaysSales();
+
+                        this.resetPayment();
+                        this.showToast(data?.message || 'Payment entry saved.');
+                    } catch (e) {
+                        this.errorMessage = 'Failed to save payment entry. Please check your connection and try again.';
+                    } finally {
+                        this.paymentSaving = false;
+                    }
+                },
+
+                buildCashBreakdownFromExpected(amount) {
+                    // Simple breakdown: use largest denominations first
+                    const denominations = [1000, 500, 200, 100, 50, 20, 10, 5, 1];
+                    const breakdown = {};
+                    let remaining = amount;
+
+                    for (const denom of denominations) {
+                        if (remaining >= denom) {
+                            const count = Math.floor(remaining / denom);
+                            breakdown[String(denom)] = count;
+                            remaining -= count * denom;
+                        } else {
+                            breakdown[String(denom)] = 0;
+                        }
+                    }
+
+                    return breakdown;
                 },
 
                 async savePaymentEntry() {

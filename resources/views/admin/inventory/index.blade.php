@@ -115,6 +115,10 @@
             </div>
 
             <div class="flex flex-col gap-3 sm:flex-row sm:items-center">
+                <div class="rounded-xl border border-emerald-600/50 bg-emerald-600/10 px-6 py-3">
+                    <p class="text-sm text-white/60">Total Stock</p>
+                    <p class="text-2xl font-semibold text-emerald-400">{{ number_format($totalStock ?? 0) }}</p>
+                </div>
                 <button type="button" x-on:click="initializeInventory()" class="inline-flex items-center justify-center rounded-xl border border-white/10 bg-white/5 px-4 py-2 text-sm font-medium text-white/80 shadow-sm hover:bg-white/10">
                     Initialize Inventory
                 </button>

@@ -56,44 +56,88 @@ class OrderController extends Controller
         $start = Carbon::today();
         $end = Carbon::tomorrow();
 
-        // Check if today's sales have been reconciled
-        $reconciledAt = null;
+        // Check if today's sales have been reconciled for cash and gcash separately
+        $cashReconciledAt = null;
+        $gcashReconciledAt = null;
         $reconciliationRow = DB::table('daily_sales_reconciliations')
             ->where('user_id', $userId)
             ->where('date', $start->toDateString())
-            ->first(['reconciled_at']);
-        if ($reconciliationRow && $reconciliationRow->reconciled_at) {
+            ->first(['reconciliation_data']);
+
+        if ($reconciliationRow && $reconciliationRow->reconciliation_data) {
             try {
-                $reconciledAt = Carbon::parse($reconciliationRow->reconciled_at);
+                $reconciliationData = json_decode($reconciliationRow->reconciliation_data, true);
+                if (isset($reconciliationData['cash']['reconciled_at'])) {
+                    $cashReconciledAt = Carbon::parse($reconciliationData['cash']['reconciled_at']);
+                }
+                if (isset($reconciliationData['gcash']['reconciled_at'])) {
+                    $gcashReconciledAt = Carbon::parse($reconciliationData['gcash']['reconciled_at']);
+                }
             } catch (\Throwable $e) {
-                $reconciledAt = null;
+                // If JSON parsing fails, fall back to old behavior
+                if ($reconciliationRow->reconciled_at) {
+                    try {
+                        $cashReconciledAt = Carbon::parse($reconciliationRow->reconciled_at);
+                        $gcashReconciledAt = Carbon::parse($reconciliationRow->reconciled_at);
+                    } catch (\Throwable $e) {
+                        $cashReconciledAt = null;
+                        $gcashReconciledAt = null;
+                    }
+                }
             }
         }
 
         $todaySales = 0.0;
         $todayOrders = 0;
         if ($userId) {
-            $todaySalesQuery = Order::query()
+            // Calculate cash sales (exclude reconciled cash orders)
+            $cashSalesQuery = Order::query()
                 ->where('created_by', $userId)
                 ->where('status', 'paid')
+                ->where('payment_type', 'cash')
                 ->where('created_at', '>=', $start)
                 ->where('created_at', '<', $end);
 
-            // Exclude orders created before reconciliation cutoff
-            if ($reconciledAt) {
-                $todaySalesQuery->where('created_at', '>', $reconciledAt);
+            if ($cashReconciledAt) {
+                $cashSalesQuery->where('created_at', '>', $cashReconciledAt);
             }
 
-            $todaySales = (float) $todaySalesQuery->sum('total');
+            $cashSales = (float) $cashSalesQuery->sum('total');
 
+            // Calculate GCash sales (exclude reconciled GCash orders)
+            $gcashSalesQuery = Order::query()
+                ->where('created_by', $userId)
+                ->where('status', 'paid')
+                ->where('payment_type', 'gcash')
+                ->where('created_at', '>=', $start)
+                ->where('created_at', '<', $end);
+
+            if ($gcashReconciledAt) {
+                $gcashSalesQuery->where('created_at', '>', $gcashReconciledAt);
+            }
+
+            $gcashSales = (float) $gcashSalesQuery->sum('total');
+
+            $todaySales = $cashSales + $gcashSales;
+
+            // Calculate total orders (use the later of the two cutoffs)
             $todayOrdersQuery = Order::query()
                 ->where('created_by', $userId)
                 ->where('created_at', '>=', $start)
                 ->where('created_at', '<', $end);
 
-            // Exclude orders created before reconciliation cutoff
-            if ($reconciledAt) {
-                $todayOrdersQuery->where('created_at', '>', $reconciledAt);
+            // Use the latest reconciliation cutoff
+            $latestCutoff = null;
+            if ($cashReconciledAt && $gcashReconciledAt) {
+                $latestCutoff = $cashReconciledAt->gt($gcashReconciledAt) ? $cashReconciledAt : $gcashReconciledAt;
+            } elseif ($cashReconciledAt) {
+                $latestCutoff = $cashReconciledAt;
+            } elseif ($gcashReconciledAt) {
+                $latestCutoff = $gcashReconciledAt;
+            }
+
+            if ($latestCutoff) {
+                $todayOrdersQuery->where('created_at', '>', $latestCutoff);
             }
 
             $todayOrders = (int) $todayOrdersQuery->count();
@@ -186,9 +230,12 @@ class OrderController extends Controller
 
         $inventoryMap = $inventories->keyBy('product_id');
 
+        $totalStock = Inventory::sum('stock_quantity');
+
         return response()->view('orders.create', [
             'products' => $products,
             'inventoryMap' => $inventoryMap,
+            'totalStock' => $totalStock,
         ]);
     }
 

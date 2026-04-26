@@ -35,9 +35,9 @@
                 <div class="mt-1 text-xs text-white/35">Placeholder</div>
             </div>
             <div class="rounded-xl border border-white/10 bg-white/5 p-5 shadow-sm">
-                <div class="text-xs text-white/50">Total Products</div>
-                <div class="mt-2 text-2xl font-semibold">—</div>
-                <div class="mt-1 text-xs text-white/35">Placeholder</div>
+                <div class="text-xs text-white/50">Total Stock</div>
+                <div class="mt-2 text-2xl font-semibold">{{ number_format($totalStock ?? 0) }}</div>
+                <div class="mt-1 text-xs text-white/35">Items in inventory</div>
             </div>
         </div>
 
