@@ -328,17 +328,71 @@ class AdminOrderController extends Controller
             ->orderByDesc('denomination')
             ->get(['denomination', 'quantity']);
 
-        $moneyInventoryTotal = (int) $moneyInventoryRows
-            ->sum(fn (MoneyInventory $r) => ((int) $r->denomination) * ((int) $r->quantity));
+        // Load Cash entries from PaymentEntry table to get the denomination breakdown
+        $cashPaymentEntries = PaymentEntry::query()
+            ->where('user_id', $staff->id)
+            ->whereDate('date', $date)
+            ->where('payment_type', 'cash')
+            ->with(['items' => function ($q) {
+                $q->orderByDesc('denomination');
+            }])
+            ->get(['id', 'received_amount']);
+
+        // Aggregate denomination breakdown from all cash payment entries
+        $cashDenominationBreakdown = [];
+        $cashTotal = 0;
+
+        foreach ($cashPaymentEntries as $entry) {
+            $cashTotal += (int) $entry->received_amount;
+            foreach ($entry->items as $item) {
+                $denom = (int) $item->denomination;
+                $qty = (int) $item->quantity;
+                if (!isset($cashDenominationBreakdown[$denom])) {
+                    $cashDenominationBreakdown[$denom] = 0;
+                }
+                $cashDenominationBreakdown[$denom] += $qty;
+            }
+        }
+
+        // Convert to array format for the response
+        $cashBreakdownArray = [];
+        foreach ($cashDenominationBreakdown as $denom => $qty) {
+            if ($qty > 0) {
+                $cashBreakdownArray[] = [
+                    'denomination' => $denom,
+                    'quantity' => $qty,
+                    'subtotal' => $denom * $qty,
+                ];
+            }
+        }
+
+        // Sort by denomination descending
+        usort($cashBreakdownArray, function ($a, $b) {
+            return $b['denomination'] <=> $a['denomination'];
+        });
+
+        // Use cash payment entry data if available, otherwise fall back to MoneyInventory
+        if ($cashTotal > 0) {
+            $moneyInventoryTotal = $cashTotal;
+            $moneyInventoryBreakdown = $cashBreakdownArray;
+        } else {
+            $moneyInventoryTotal = (int) $moneyInventoryRows
+                ->sum(fn (MoneyInventory $r) => ((int) $r->denomination) * ((int) $r->quantity));
+            $moneyInventoryBreakdown = $moneyInventoryRows->map(fn (MoneyInventory $r) => [
+                'denomination' => (int) $r->denomination,
+                'quantity' => (int) $r->quantity,
+                'subtotal' => (int) $r->denomination * (int) $r->quantity,
+            ])->values()->all();
+        }
 
         $paymentEntries = PaymentEntry::query()
             ->where('user_id', $staff->id)
             ->whereDate('date', $date)
             ->with(['items' => function ($q) {
                 $q->orderByDesc('denomination');
-            }])
+            }, 'order', 'verifiedByUser:id,name'])
             ->latest()
-            ->get(['id', 'payment_type', 'received_amount', 'created_at']);
+            ->get(['id', 'payment_type', 'received_amount', 'order_id', 'gcash_sender_name', 'gcash_reference_number', 'gcash_sender_mobile', 'gcash_proof_image', 'verified_at', 'verified_by', 'created_at']);
 
         $cashPaymentsTotal = (int) $paymentEntries
             ->where('payment_type', 'cash')
@@ -366,12 +420,8 @@ class AdminOrderController extends Controller
                 ],
             ],
             'money_inventory' => [
-                'total_cash' => (int) $moneyInventoryTotal,
-                'breakdown' => $moneyInventoryRows->map(fn (MoneyInventory $r) => [
-                    'denomination' => (int) $r->denomination,
-                    'quantity' => (int) $r->quantity,
-                    'subtotal' => (int) $r->denomination * (int) $r->quantity,
-                ])->values()->all(),
+                'total_cash' => $moneyInventoryTotal,
+                'breakdown' => $moneyInventoryBreakdown,
             ],
             'payment_inventory' => [
                 'totals' => [
@@ -380,10 +430,23 @@ class AdminOrderController extends Controller
                     'overall' => (int) ($cashPaymentsTotal + $gcashPaymentsTotal),
                 ],
                 'entries' => $paymentEntries->map(function (PaymentEntry $e) {
+                    $gcashProofImageUrl = null;
+                    if ($e->gcash_proof_image) {
+                        $gcashProofImageUrl = \Illuminate\Support\Facades\Storage::disk('public')->url($e->gcash_proof_image);
+                    }
+
                     return [
                         'id' => (int) $e->id,
                         'payment_type' => (string) $e->payment_type,
                         'received_amount' => (int) $e->received_amount,
+                        'order_id' => (int) $e->order_id,
+                        'order_number' => $e->order ? (string) $e->order->order_number : null,
+                        'gcash_sender_name' => $e->gcash_sender_name,
+                        'gcash_reference_number' => $e->gcash_reference_number,
+                        'gcash_sender_mobile' => $e->gcash_sender_mobile,
+                        'gcash_proof_image' => $gcashProofImageUrl,
+                        'verified_at' => $e->verified_at ? $this->formatHumanDateTime(Carbon::instance($e->verified_at)) : null,
+                        'verified_by' => $e->verifiedByUser ? (string) $e->verifiedByUser->name : null,
                         'created_at' => $this->formatHumanDateTime($e->created_at ? Carbon::instance($e->created_at) : null),
                         'created_at_raw' => $e->created_at?->toIso8601String(),
                         'items' => $e->items->map(fn (PaymentEntryItem $i) => [

@@ -356,13 +356,34 @@ class StaffMoneyInventoryController extends Controller
         }
 
         $entry = DB::transaction(function () use ($user, $date, $paymentType, $receivedAmount, $cleanBreakdown, $orderId) {
-            $entry = PaymentEntry::create([
+            $entryData = [
                 'user_id' => $user->id,
                 'date' => $date,
                 'payment_type' => $paymentType,
                 'received_amount' => $receivedAmount,
                 'order_id' => $orderId,
-            ]);
+            ];
+
+            // If this is a GCash entry with an order, copy GCash verification data from the order
+            if ($paymentType === 'gcash' && $orderId) {
+                $order = Order::where('id', $orderId)
+                    ->where('created_by', $user->id)
+                    ->where('payment_type', 'gcash')
+                    ->where('status', 'paid')
+                    ->whereDate('created_at', $date)
+                    ->first();
+
+                if ($order) {
+                    $entryData['gcash_sender_name'] = $order->gcash_sender_name;
+                    $entryData['gcash_reference_number'] = $order->gcash_reference;
+                    $entryData['gcash_sender_mobile'] = $order->gcash_sender_mobile;
+                    $entryData['gcash_proof_image'] = $order->gcash_proof_image;
+                    $entryData['verified_at'] = now();
+                    $entryData['verified_by'] = $user->id;
+                }
+            }
+
+            $entry = PaymentEntry::create($entryData);
 
             foreach ($cleanBreakdown as $denom => $qty) {
                 if ($qty <= 0) {

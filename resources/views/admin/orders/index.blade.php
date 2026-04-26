@@ -186,9 +186,75 @@
                                         </div>
                                     </template>
                                     <template x-if="(dailyPayload.money_inventory?.breakdown || []).filter(x => (x.quantity || 0) > 0).length === 0">
-                                        <div class="col-span-2 sm:col-span-4 lg:col-span-6 rounded-xl border border-white/10 bg-[#111]/40 px-3 py-2 text-xs text-white/60">No money inventory saved.</div>
+                                        <div class="col-span-2 sm:col-span-4 lg:grid-cols-6 rounded-xl border border-white/10 bg-[#111]/40 px-3 py-2 text-xs text-white/60">No money inventory saved.</div>
                                     </template>
                                 </div>
+                            </div>
+
+                            <div class="rounded-xl border border-white/10 bg-white/5 p-4">
+                                <div class="flex items-center justify-between gap-4 mb-4">
+                                    <div>
+                                        <div class="text-sm font-semibold">GCash Verification</div>
+                                        <div class="mt-1 text-xs text-white/60">Verified GCash transactions</div>
+                                    </div>
+                                    <div class="text-sm font-semibold text-white">
+                                        Total: ₱<span x-text="formatPrice(dailyPayload.payment_inventory?.totals?.gcash || 0)"></span>
+                                    </div>
+                                </div>
+                                <template x-if="(dailyPayload.payment_inventory?.entries || []).filter(x => x.payment_type === 'gcash').length > 0">
+                                    <div class="space-y-3">
+                                        <template x-for="entry in (dailyPayload.payment_inventory?.entries || []).filter(x => x.payment_type === 'gcash')" :key="'gcash-' + entry.id">
+                                            <div class="rounded-xl border border-blue-500/20 bg-blue-500/5 p-3">
+                                                <div class="flex items-center justify-between gap-2 mb-2">
+                                                    <div class="text-xs text-white/60" x-text="'Order #' + (entry.order_number || '—')"></div>
+                                                    <div class="text-xs font-semibold text-blue-200">₱<span x-text="formatPrice(entry.received_amount)"></span></div>
+                                                </div>
+                                                <div class="grid grid-cols-1 gap-1 text-xs">
+                                                    <template x-if="entry.gcash_sender_name">
+                                                        <div class="flex justify-between">
+                                                            <span class="text-white/60">Sender:</span>
+                                                            <span class="text-white" x-text="entry.gcash_sender_name"></span>
+                                                        </div>
+                                                    </template>
+                                                    <template x-if="entry.gcash_reference_number">
+                                                        <div class="flex justify-between">
+                                                            <span class="text-white/60">Ref No:</span>
+                                                            <span class="text-white" x-text="entry.gcash_reference_number"></span>
+                                                        </div>
+                                                    </template>
+                                                    <template x-if="entry.gcash_sender_mobile">
+                                                        <div class="flex justify-between">
+                                                            <span class="text-white/60">Mobile:</span>
+                                                            <span class="text-white" x-text="entry.gcash_sender_mobile"></span>
+                                                        </div>
+                                                    </template>
+                                                    <template x-if="entry.verified_by">
+                                                        <div class="flex justify-between">
+                                                            <span class="text-white/60">Verified by:</span>
+                                                            <span class="text-white" x-text="entry.verified_by"></span>
+                                                        </div>
+                                                    </template>
+                                                    <template x-if="entry.verified_at">
+                                                        <div class="flex justify-between">
+                                                            <span class="text-white/60">Verified at:</span>
+                                                            <span class="text-white" x-text="entry.verified_at"></span>
+                                                        </div>
+                                                    </template>
+                                                </div>
+                                                <template x-if="entry.gcash_proof_image">
+                                                    <div class="mt-2">
+                                                        <button type="button" x-on:click="openImagePreview(entry.gcash_proof_image)" class="cursor-pointer">
+                                                            <img :src="entry.gcash_proof_image" alt="GCash Proof" class="max-h-32 rounded-lg border border-white/10 hover:border-blue-500/50 transition">
+                                                        </button>
+                                                    </div>
+                                                </template>
+                                            </div>
+                                        </template>
+                                    </div>
+                                </template>
+                                <template x-if="(dailyPayload.payment_inventory?.entries || []).filter(x => x.payment_type === 'gcash').length === 0">
+                                    <div class="rounded-xl border border-white/10 bg-[#111]/40 px-3 py-2 text-xs text-white/60">No GCash verifications saved.</div>
+                                </template>
                             </div>
 
                             <div class="space-y-3">

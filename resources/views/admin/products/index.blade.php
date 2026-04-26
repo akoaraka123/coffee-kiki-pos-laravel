@@ -3,7 +3,7 @@
 @section('title', 'Products')
 
 @section('content')
-    <div class="space-y-6" x-data="adminProductsIndex">
+    <div class="space-y-6" x-data="adminProductsIndex" x-init="totalStock = {{ $totalStock ?? 0 }}">
         <div class="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
             <div>
                 <h2 class="text-xl font-semibold">Products</h2>

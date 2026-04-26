@@ -437,6 +437,11 @@ class AdminProductController extends Controller
         $imagePath = $items->first()?->image;
 
         DB::transaction(function () use ($items): void {
+            // Delete inventory records for these products
+            $productIds = $items->pluck('id');
+            Inventory::whereIn('product_id', $productIds)->delete();
+            
+            // Delete the products
             $items->each->delete();
         });
 
