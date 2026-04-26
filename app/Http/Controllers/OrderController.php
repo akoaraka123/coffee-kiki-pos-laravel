@@ -256,6 +256,21 @@ class OrderController extends Controller
             abort(403, 'Staff is currently clocked out. You cannot add or checkout orders.');
         }
 
+        // Check for active sales session
+        $activeSalesSession = \App\Models\Shift::where('user_id', $user->id)
+            ->where('status', 'ACTIVE')
+            ->first();
+
+        if (! $activeSalesSession) {
+            if ($request->expectsJson()) {
+                return response()->json([
+                    'message' => 'No active sales session found.',
+                ], 403);
+            }
+
+            abort(403, 'No active sales session found.');
+        }
+
         $validated = $request->validate([
             'customer_name' => ['nullable', 'string', 'max:255'],
             'status' => ['required', 'string', 'in:pending,paid,cancelled'],
@@ -424,6 +439,11 @@ class OrderController extends Controller
                 $gcashProofImagePath = $this->saveGcashProofImage($validated['gcash_proof_image']);
             }
 
+            // Get active shift for the user
+            $activeShift = \App\Models\Shift::where('user_id', $request->user()->id)
+                ->where('status', 'ACTIVE')
+                ->first();
+
             $order = Order::create([
                 'order_number' => $this->generateOrderNumber(),
                 'customer_name' => $validated['customer_name'] ?? null,
@@ -438,6 +458,8 @@ class OrderController extends Controller
                 'gcash_sender_mobile' => $paymentType === 'gcash' ? ($validated['gcash_sender_mobile'] ?? null) : null,
                 'gcash_proof_image' => $gcashProofImagePath,
                 'created_by' => $request->user()->id,
+                'shift_id' => $activeSalesSession ? $activeSalesSession->shift_id : null,
+                'business_date' => $activeSalesSession ? $activeSalesSession->business_date : null,
             ]);
 
             foreach ($itemsToInsert as $row) {

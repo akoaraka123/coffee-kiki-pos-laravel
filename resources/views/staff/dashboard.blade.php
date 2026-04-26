@@ -3,7 +3,7 @@
 @section('title', 'Staff Dashboard')
 
 @section('content')
-    <div class="space-y-6">
+    <div class="space-y-6" x-data="staffDashboard" x-init="checkActiveSalesSession()">
         <div class="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
             <div>
                 <h2 class="text-xl font-semibold">Today</h2>

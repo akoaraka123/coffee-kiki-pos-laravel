@@ -3,15 +3,18 @@
 namespace App\Http\Controllers\Admin;
 
 use App\Http\Controllers\Controller;
+use App\Models\Inventory;
 use App\Models\MoneyInventory;
 use App\Models\Order;
 use App\Models\PaymentEntry;
 use App\Models\PaymentEntryItem;
+use App\Models\Shift;
 use App\Models\User;
 use Carbon\Carbon;
 use Illuminate\Pagination\LengthAwarePaginator;
 use Illuminate\Http\Request;
 use Illuminate\Http\JsonResponse;
+use Illuminate\Support\Facades\DB;
 use Illuminate\View\View;
 
 class AdminOrderController extends Controller
@@ -162,7 +165,11 @@ class AdminOrderController extends Controller
 
         $orders = Order::query()
             ->where('created_by', $staff->id)
-            ->whereDate('created_at', $date)
+            ->where(function ($q) use ($date) {
+                // Filter by business_date if available, otherwise fallback to created_at
+                $q->whereDate('business_date', $date)
+                  ->orWhereDate('created_at', $date);
+            })
             ->with([
                 'items' => function ($q) {
                     $q->withTrashed()->select(['id', 'order_id', 'product_id', 'name', 'price', 'quantity', 'line_total', 'deleted_at']);
@@ -179,7 +186,7 @@ class AdminOrderController extends Controller
                 },
             ])
             ->orderBy('created_at')
-            ->get(['id', 'order_number', 'total', 'total_amount', 'payment_type', 'cash_received', 'change_amount', 'status', 'created_at', 'created_by', 'gcash_reference', 'gcash_sender_name', 'gcash_sender_mobile', 'gcash_proof_image']);
+            ->get(['id', 'order_number', 'total', 'total_amount', 'payment_type', 'cash_received', 'change_amount', 'status', 'created_at', 'created_by', 'gcash_reference', 'gcash_sender_name', 'gcash_sender_mobile', 'gcash_proof_image', 'shift_id', 'business_date']);
 
         $totalOrders = $orders->count();
         $totalSales = (float) $orders->sum(fn (Order $o) => (float) ($o->total_amount ?? $o->total ?? 0));
@@ -278,7 +285,11 @@ class AdminOrderController extends Controller
 
         $orders = Order::query()
             ->where('created_by', $staff->id)
-            ->whereDate('created_at', $date)
+            ->where(function ($q) use ($date) {
+                // Filter by business_date if available, otherwise fallback to created_at
+                $q->whereDate('business_date', $date)
+                  ->orWhereDate('created_at', $date);
+            })
             ->with([
                 'items' => function ($q) {
                     $q->withTrashed()->select(['id', 'order_id', 'product_id', 'name', 'price', 'quantity', 'line_total', 'deleted_at']);
@@ -297,7 +308,7 @@ class AdminOrderController extends Controller
                 },
             ])
             ->orderBy('created_at')
-            ->get(['id', 'order_number', 'total', 'total_amount', 'payment_type', 'cash_received', 'change_amount', 'status', 'created_at', 'created_by', 'gcash_reference', 'gcash_sender_name', 'gcash_sender_mobile', 'gcash_proof_image']);
+            ->get(['id', 'order_number', 'total', 'total_amount', 'payment_type', 'cash_received', 'change_amount', 'status', 'created_at', 'created_by', 'gcash_reference', 'gcash_sender_name', 'gcash_sender_mobile', 'gcash_proof_image', 'shift_id', 'business_date']);
 
         $totalOrders = $orders->count();
         $totalSales = (float) $orders->sum(fn (Order $o) => (float) ($o->total_amount ?? $o->total ?? 0));
@@ -324,14 +335,22 @@ class AdminOrderController extends Controller
 
         $moneyInventoryRows = MoneyInventory::query()
             ->where('user_id', $staff->id)
-            ->whereDate('date', $date)
+            ->where(function ($q) use ($date) {
+                // Filter by business_date if available, otherwise fallback to date
+                $q->whereDate('business_date', $date)
+                  ->orWhereDate('date', $date);
+            })
             ->orderByDesc('denomination')
             ->get(['denomination', 'quantity']);
 
         // Load Cash entries from PaymentEntry table to get the denomination breakdown
         $cashPaymentEntries = PaymentEntry::query()
             ->where('user_id', $staff->id)
-            ->whereDate('date', $date)
+            ->where(function ($q) use ($date) {
+                // Filter by business_date if available, otherwise fallback to date
+                $q->whereDate('business_date', $date)
+                  ->orWhereDate('date', $date);
+            })
             ->where('payment_type', 'cash')
             ->with(['items' => function ($q) {
                 $q->orderByDesc('denomination');
@@ -387,12 +406,16 @@ class AdminOrderController extends Controller
 
         $paymentEntries = PaymentEntry::query()
             ->where('user_id', $staff->id)
-            ->whereDate('date', $date)
+            ->where(function ($q) use ($date) {
+                // Filter by business_date if available, otherwise fallback to date
+                $q->whereDate('business_date', $date)
+                  ->orWhereDate('date', $date);
+            })
             ->with(['items' => function ($q) {
                 $q->orderByDesc('denomination');
             }, 'order', 'verifiedByUser:id,name'])
             ->latest()
-            ->get(['id', 'payment_type', 'received_amount', 'order_id', 'gcash_sender_name', 'gcash_reference_number', 'gcash_sender_mobile', 'gcash_proof_image', 'verified_at', 'verified_by', 'created_at']);
+            ->get(['id', 'payment_type', 'received_amount', 'order_id', 'gcash_sender_name', 'gcash_reference_number', 'gcash_sender_mobile', 'gcash_proof_image', 'verified_at', 'verified_by', 'created_at', 'shift_id', 'business_date']);
 
         $cashPaymentsTotal = (int) $paymentEntries
             ->where('payment_type', 'cash')
@@ -402,14 +425,27 @@ class AdminOrderController extends Controller
             ->where('payment_type', 'gcash')
             ->sum(fn (PaymentEntry $e) => (int) $e->received_amount);
 
+        // Load sales session information for the staff and date
+        $salesSession = Shift::where('user_id', $staff->id)
+            ->where('business_date', $date)
+            ->first(['shift_id', 'started_at', 'ended_at', 'status', 'opening_cash', 'closing_cash']);
+
         return response()->json([
-            'date' => $date,
-            'date_display' => $dateDisplay,
             'staff' => [
                 'id' => (int) $staff->id,
                 'name' => (string) $staff->name,
             ],
-            'summary' => [
+            'date' => $date,
+            'date_display' => $dateDisplay,
+            'sales_session' => $salesSession ? [
+                'session_id' => (string) $salesSession->shift_id,
+                'started_at' => $salesSession->started_at ? $this->formatHumanDateTime(Carbon::instance($salesSession->started_at)) : null,
+                'ended_at' => $salesSession->ended_at ? $this->formatHumanDateTime(Carbon::instance($salesSession->ended_at)) : null,
+                'status' => (string) $salesSession->status,
+                'opening_cash' => (float) ($salesSession->opening_cash ?? 0),
+                'closing_cash' => (float) ($salesSession->closing_cash ?? 0),
+            ] : null,
+            'orders_summary' => [
                 'total_orders' => (int) $totalOrders,
                 'total_items' => (int) $totalItems,
                 'total_sales' => (float) $totalSales,
@@ -530,23 +566,56 @@ class AdminOrderController extends Controller
         ]);
     }
 
-    public function deleteTodaySales(Request $request): JsonResponse
+    public function destroy(Order $order): JsonResponse
     {
-        $staffId = $request->string('staff')->toString();
-        $staffId = $staffId !== '' ? $staffId : null;
+        DB::transaction(function () use ($order) {
+            // Restore inventory stock for deleted order items
+            $items = $order->items()->withTrashed()->get();
+            foreach ($items as $item) {
+                $inventory = Inventory::where('product_id', $item->product_id)->first();
+                if ($inventory) {
+                    $inventory->stock_quantity += $item->quantity;
+                    $inventory->save();
+                }
+            }
 
-        $today = Carbon::today();
-        $tomorrow = Carbon::tomorrow();
+            // Delete order activities
+            $order->activities()->delete();
+
+            // Delete order items
+            $order->items()->delete();
+
+            // Delete the order
+            $order->delete();
+        });
+
+        return response()->json([
+            'message' => 'Order deleted successfully.',
+        ]);
+    }
+
+    public function deleteDailySales(Request $request): JsonResponse
+    {
+        $validated = $request->validate([
+            'staff' => ['nullable', 'integer', 'exists:users,id'],
+            'date' => ['required', 'date_format:Y-m-d'],
+        ]);
+
+        $staffId = $validated['staff'] ?? null;
+        $date = $validated['date'];
 
         $deletedOrders = 0;
         $deletedPaymentEntries = 0;
         $deletedReconciliations = 0;
 
-        DB::transaction(function () use ($staffId, $today, $tomorrow, &$deletedOrders, &$deletedPaymentEntries, &$deletedReconciliations) {
-            // Delete orders for today
+        DB::transaction(function () use ($staffId, $date, &$deletedOrders, &$deletedPaymentEntries, &$deletedReconciliations) {
+            // Delete orders for the business date with fallback to created_at
             $orderQuery = Order::query()
-                ->where('created_at', '>=', $today)
-                ->where('created_at', '<', $tomorrow);
+                ->where(function ($q) use ($date) {
+                    // Filter by business_date if available, otherwise fallback to created_at date
+                    $q->where('business_date', $date)
+                      ->orWhereDate('created_at', $date);
+                });
 
             if ($staffId) {
                 $orderQuery->where('created_by', $staffId);
@@ -554,13 +623,34 @@ class AdminOrderController extends Controller
 
             $orders = $orderQuery->get(['id']);
             foreach ($orders as $order) {
+                // Restore inventory stock for deleted order items
+                $items = $order->items()->withTrashed()->get();
+                foreach ($items as $item) {
+                    $inventory = Inventory::where('product_id', $item->product_id)->first();
+                    if ($inventory) {
+                        $inventory->stock_quantity += $item->quantity;
+                        $inventory->save();
+                    }
+                }
+                
+                // Delete order activities
+                $order->activities()->delete();
+                
+                // Delete order items
+                $order->items()->delete();
+                
+                // Delete the order
                 $order->delete();
                 $deletedOrders++;
             }
 
-            // Delete payment entries for today
+            // Delete payment entries for the business date with fallback to date
             $paymentEntryQuery = \App\Models\PaymentEntry::query()
-                ->whereDate('date', $today->toDateString());
+                ->where(function ($q) use ($date) {
+                    // Filter by business_date if available, otherwise fallback to date
+                    $q->where('business_date', $date)
+                      ->orWhereDate('date', $date);
+                });
 
             if ($staffId) {
                 $paymentEntryQuery->where('user_id', $staffId);
@@ -572,9 +662,9 @@ class AdminOrderController extends Controller
                 $deletedPaymentEntries++;
             }
 
-            // Delete daily sales reconciliation records for today
+            // Delete daily sales reconciliation records for the date
             $reconciliationQuery = DB::table('daily_sales_reconciliations')
-                ->where('date', $today->toDateString());
+                ->where('date', $date);
 
             if ($staffId) {
                 $reconciliationQuery->where('user_id', $staffId);
@@ -584,7 +674,7 @@ class AdminOrderController extends Controller
         });
 
         return response()->json([
-            'message' => "Deleted {$deletedOrders} orders, {$deletedPaymentEntries} payment entries, and {$deletedReconciliations} reconciliation records from today.",
+            'message' => "Deleted {$deletedOrders} orders, {$deletedPaymentEntries} payment entries, and {$deletedReconciliations} reconciliation records.",
             'deleted_orders' => $deletedOrders,
             'deleted_payment_entries' => $deletedPaymentEntries,
             'deleted_reconciliations' => $deletedReconciliations,

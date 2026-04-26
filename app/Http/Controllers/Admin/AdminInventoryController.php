@@ -130,20 +130,20 @@ class AdminInventoryController extends Controller
     {
         $validated = $request->validate([
             'inventory_id' => ['required', 'exists:inventories,id'],
-            'quantity' => ['required', 'integer', 'min:1'],
         ]);
 
         $inventory = Inventory::findOrFail($validated['inventory_id']);
-        $quantity = (int) $validated['quantity'];
 
-        if ($quantity > $inventory->stock_quantity) {
+        if ($inventory->stock_quantity <= 0) {
             return response()->json([
-                'message' => 'Cannot delete more stock than currently available.',
+                'message' => 'Stock is already 0.',
             ], 400);
         }
 
+        $quantity = $inventory->stock_quantity;
+
         DB::transaction(function () use ($inventory, $quantity, $request) {
-            $inventory->stock_quantity -= $quantity;
+            $inventory->stock_quantity = 0;
             $inventory->save();
 
             InventoryHistory::create([
@@ -151,7 +151,7 @@ class AdminInventoryController extends Controller
                 'product_id' => $inventory->product_id,
                 'product_name' => $inventory->product_name,
                 'size' => $inventory->size,
-                'action_type' => 'DEDUCT_STOCK',
+                'action_type' => 'DELETE_STOCK',
                 'quantity' => $quantity,
                 'user_id' => $request->user()->id,
                 'user_name' => $request->user()->name,

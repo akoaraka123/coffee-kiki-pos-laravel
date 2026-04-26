@@ -25,11 +25,6 @@
                 <button type="submit" class="inline-flex items-center justify-center rounded-xl border border-white/10 bg-white/5 px-4 py-2 text-sm font-semibold text-white/80 shadow-sm hover:bg-white/10">
                     Today Sales
                 </button>
-
-                <button type="button" x-on:click="deleteTodaySales('{{ $staffId ?? '' }}')" x-bind:disabled="deletingToday" class="inline-flex items-center justify-center rounded-xl border border-rose-500/30 bg-rose-500/10 px-4 py-2 text-sm font-semibold text-rose-200 shadow-sm hover:bg-rose-500/20 disabled:opacity-60">
-                    <span x-show="!deletingToday">Delete Today Sales</span>
-                    <span x-show="deletingToday" x-cloak>Deleting...</span>
-                </button>
             </form>
         </div>
 
@@ -71,6 +66,15 @@
                                         x-on:click="openDaily('{{ $row['date'] }}', '{{ $row['staff_id'] }}')"
                                     >
                                         View
+                                    </button>
+                                    <button
+                                        type="button"
+                                        class="ml-2 inline-flex items-center justify-center rounded-xl border border-rose-500/30 bg-rose-500/10 px-4 py-2 text-xs font-semibold text-rose-200 shadow-sm hover:bg-rose-500/20 disabled:opacity-60"
+                                        x-on:click="deleteDailySales('{{ $row['date'] }}', '{{ $row['staff_id'] }}')"
+                                        x-bind:disabled="deletingDailySalesId === '{{ $row['date'] }}-{{ $row['staff_id'] }}'"
+                                    >
+                                        <span x-show="deletingDailySalesId !== '{{ $row['date'] }}-{{ $row['staff_id'] }}'">Delete</span>
+                                        <span x-show="deletingDailySalesId === '{{ $row['date'] }}-{{ $row['staff_id'] }}'" x-cloak>Deleting...</span>
                                     </button>
                                 </td>
                             </tr>
@@ -123,7 +127,7 @@
                                         </div>
                                         <div>
                                             <div class="text-xs text-white/60">Total Orders</div>
-                                            <div class="mt-1 text-xl font-bold" x-text="Number(dailyPayload.summary.total_orders).toLocaleString()"></div>
+                                            <div class="mt-1 text-xl font-bold" x-text="Number(dailyPayload.orders_summary?.total_orders || 0).toLocaleString()"></div>
                                         </div>
                                     </div>
                                 </div>
@@ -136,7 +140,7 @@
                                         </div>
                                         <div>
                                             <div class="text-xs text-white/60">Total Sales</div>
-                                            <div class="mt-1 text-xl font-bold">₱<span x-text="formatPrice(dailyPayload.summary.total_sales)"></span></div>
+                                            <div class="mt-1 text-xl font-bold">₱<span x-text="formatPrice(dailyPayload.orders_summary?.total_sales || 0)"></span></div>
                                         </div>
                                     </div>
                                 </div>
@@ -149,7 +153,7 @@
                                         </div>
                                         <div>
                                             <div class="text-xs text-white/60">Cash Payments</div>
-                                            <div class="mt-1 text-xl font-bold">₱<span x-text="formatPrice((dailyPayload.summary?.paid_sales?.cash || 0))"></span></div>
+                                            <div class="mt-1 text-xl font-bold">₱<span x-text="formatPrice((dailyPayload.orders_summary?.paid_sales?.cash || 0))"></span></div>
                                         </div>
                                     </div>
                                 </div>
@@ -162,7 +166,7 @@
                                         </div>
                                         <div>
                                             <div class="text-xs text-white/60">GCash Payments</div>
-                                            <div class="mt-1 text-xl font-bold">₱<span x-text="formatPrice((dailyPayload.summary?.paid_sales?.gcash || 0))"></span></div>
+                                            <div class="mt-1 text-xl font-bold">₱<span x-text="formatPrice((dailyPayload.orders_summary?.paid_sales?.gcash || 0))"></span></div>
                                         </div>
                                     </div>
                                 </div>
@@ -282,6 +286,15 @@
                                                 <span class="inline-flex items-center rounded-full border border-emerald-500/30 bg-emerald-500/10 px-2 py-0.5 text-[11px] font-semibold text-emerald-200" x-text="order.status"></span>
                                                 <span class="inline-flex items-center rounded-full px-2 py-0.5 text-[11px] font-semibold" x-bind:class="order.payment_type === 'cash' ? 'border-emerald-500/30 bg-emerald-500/10 text-emerald-200' : 'border-blue-500/30 bg-blue-500/10 text-blue-200'" x-text="(order.payment_type || '—').toUpperCase()"></span>
                                                 <span class="text-sm font-semibold">₱<span x-text="formatPrice(order.total)"></span></span>
+                                                <button type="button" x-on:click="deleteOrder(order.id)" x-bind:disabled="deletingOrderId === order.id" class="ml-2 inline-flex items-center justify-center h-6 w-6 rounded-lg border border-rose-500/30 bg-rose-500/10 text-rose-200 hover:bg-rose-500/20 disabled:opacity-60" title="Delete Order">
+                                                    <svg x-show="deletingOrderId !== order.id" class="h-3 w-3" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
+                                                    </svg>
+                                                    <svg x-show="deletingOrderId === order.id" x-cloak class="h-3 w-3 animate-spin" fill="none" viewBox="0 0 24 24">
+                                                        <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle>
+                                                        <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+                                                    </svg>
+                                                </button>
                                                 <svg class="h-4 w-4 text-white/60 transition-transform" x-bind:class="expandedOrderId === order.id ? 'rotate-180' : ''" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                                                     <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7" />
                                                 </svg>
@@ -432,16 +445,15 @@
             </div>
         </div>
         </div>
-    </div>
 
-    <template x-if="imagePreviewOpen">
-        <div class="fixed inset-0 z-[60] flex items-center justify-center px-4">
-            <div class="fixed inset-0 bg-black/80 backdrop-blur-sm" x-transition.opacity x-on:click="closeImagePreview()"></div>
-            <div class="relative w-full max-w-4xl">
-                <button type="button" class="absolute -top-12 right-0 inline-flex h-10 w-10 items-center justify-center rounded-full border border-white/10 bg-white/5 text-white/80 hover:bg-white/10" x-on:click="closeImagePreview()">✕</button>
-                <img :src="imagePreviewUrl" class="w-full rounded-xl border border-white/10 shadow-2xl" alt="Transaction Proof" />
+        <template x-if="imagePreviewOpen">
+            <div class="fixed inset-0 z-[60] flex items-center justify-center px-4">
+                <div class="fixed inset-0 bg-black/80 backdrop-blur-sm" x-transition.opacity x-on:click="closeImagePreview()"></div>
+                <div class="relative w-full max-w-4xl">
+                    <button type="button" class="absolute -top-12 right-0 inline-flex h-10 w-10 items-center justify-center rounded-full border border-white/10 bg-white/5 text-white/80 hover:bg-white/10" x-on:click="closeImagePreview()">✕</button>
+                    <img :src="imagePreviewUrl" class="w-full rounded-xl border border-white/10 shadow-2xl" alt="Transaction Proof" />
+                </div>
             </div>
-        </div>
-    </template>
-
+        </template>
+    </div>
 @endsection

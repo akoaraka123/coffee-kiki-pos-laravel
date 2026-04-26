@@ -147,16 +147,17 @@
                                         >
                                             View
                                         </button>
-                                        <form method="POST" action="{{ route('orders.destroy', ['order' => $order->id]) }}" onsubmit="return confirm('Delete this order?');">
-                                            @csrf
-                                            @method('DELETE')
-                                            <button
-                                                type="submit"
-                                                class="inline-flex items-center justify-center rounded-xl bg-rose-600 px-4 py-2 text-xs font-semibold text-white shadow-sm hover:bg-rose-500"
-                                            >
-                                                Delete
-                                            </button>
-                                        </form>
+                                        @if(auth()->user()->isAdmin())
+                                        <button
+                                            type="button"
+                                            class="inline-flex items-center justify-center rounded-xl border border-rose-500/30 bg-rose-500/10 px-4 py-2 text-xs font-semibold text-rose-200 shadow-sm hover:bg-rose-500/20"
+                                            @click.prevent="deleteOrder({{ (int) $order->id }})"
+                                            x-bind:disabled="deletingOrderId === {{ (int) $order->id }}"
+                                        >
+                                            <span x-show="deletingOrderId !== {{ (int) $order->id }}">Delete</span>
+                                            <span x-show="deletingOrderId === {{ (int) $order->id }}" x-cloak>Deleting...</span>
+                                        </button>
+                                        @endif
                                     </div>
                                 </td>
                             </tr>

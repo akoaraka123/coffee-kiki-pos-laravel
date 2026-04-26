@@ -23,6 +23,8 @@ class PaymentEntry extends Model
         'gcash_proof_image',
         'verified_at',
         'verified_by',
+        'shift_id',
+        'business_date',
     ];
 
     protected $casts = [

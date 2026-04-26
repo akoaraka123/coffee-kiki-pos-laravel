@@ -59,17 +59,17 @@
         async submitDeleteStock() {
             if (!this.selectedInventory) return;
 
-            const form = document.getElementById('deleteStockForm');
-            const formData = new FormData(form);
-
             try {
                 const response = await fetch('{{ route('staff.inventory.delete-stock') }}', {
                     method: 'POST',
                     headers: {
                         'X-CSRF-TOKEN': '{{ csrf_token() }}',
                         'Accept': 'application/json',
+                        'Content-Type': 'application/json',
                     },
-                    body: formData
+                    body: JSON.stringify({
+                        inventory_id: this.selectedInventory,
+                    }),
                 });
 
                 const data = await response.json();
@@ -225,28 +225,16 @@
             <div class="fixed inset-0 bg-black/60" x-on:click="closeDeleteStockModal()"></div>
             <div class="relative z-10 w-full max-w-md rounded-2xl border border-white/10 bg-[#1b1b1b] p-6 shadow-xl">
                 <h3 class="text-lg font-semibold">Delete Stock</h3>
-                <p class="mt-1 text-sm text-white/50">Enter the quantity to delete from inventory.</p>
+                <p class="mt-1 text-sm text-white/50">Delete all stock from this item? This will set stock to 0.</p>
 
-                <form id="deleteStockForm" x-on:submit.prevent="submitDeleteStock()">
-                    @csrf
-                    <input type="hidden" name="inventory_id" x-model="selectedInventory">
-
-                    <div class="mt-4 space-y-4">
-                        <div>
-                            <label class="block text-sm font-medium text-white/70">Quantity to Delete</label>
-                            <input type="number" name="quantity" x-model="deleteQuantity" min="1" required class="mt-1 w-full rounded-xl bg-white/5 border border-white/10 px-4 py-3 text-white placeholder-white/40 focus:outline-none focus:ring-2 focus:ring-white/20">
-                        </div>
-                    </div>
-
-                    <div class="mt-6 flex gap-3">
-                        <button type="button" x-on:click="closeDeleteStockModal()" class="flex-1 inline-flex items-center justify-center rounded-xl border border-white/10 bg-white/5 px-4 py-2 text-sm font-medium text-white/80 hover:bg-white/10">
-                            Cancel
-                        </button>
-                        <button type="submit" class="flex-1 inline-flex items-center justify-center rounded-xl bg-rose-500/20 border border-rose-500/30 px-4 py-2 text-sm font-semibold text-rose-200 shadow-sm hover:bg-rose-500/30">
-                            Delete Stock
-                        </button>
-                    </div>
-                </form>
+                <div class="mt-6 flex gap-3">
+                    <button type="button" x-on:click="closeDeleteStockModal()" class="flex-1 inline-flex items-center justify-center rounded-xl border border-white/10 bg-white/5 px-4 py-2 text-sm font-medium text-white/80 hover:bg-white/10">
+                        Cancel
+                    </button>
+                    <button type="button" x-on:click="submitDeleteStock()" class="flex-1 inline-flex items-center justify-center rounded-xl bg-rose-500/20 border border-rose-500/30 px-4 py-2 text-sm font-semibold text-rose-200 shadow-sm hover:bg-rose-500/30">
+                        Delete
+                    </button>
+                </div>
             </div>
         </div>
     </template>

@@ -5,6 +5,7 @@ use App\Http\Controllers\AdminDashboardController;
 use App\Http\Controllers\StaffDashboardController;
 use App\Http\Controllers\StaffInventoryController;
 use App\Http\Controllers\StaffMoneyInventoryController;
+use App\Http\Controllers\StaffShiftController;
 use App\Http\Controllers\Admin\AdminUserController;
 use App\Http\Controllers\Admin\AdminOrderController;
 use App\Http\Controllers\Admin\AdminProductController;
@@ -40,7 +41,8 @@ Route::prefix('admin')
         Route::get('/orders/details', [AdminOrderController::class, 'details'])->name('orders.details');
         Route::get('/orders/details-json', [AdminOrderController::class, 'detailsJson'])->name('orders.details-json');
         Route::get('/orders/{order}', [AdminOrderController::class, 'show'])->name('orders.show');
-        Route::post('/orders/delete-today-sales', [AdminOrderController::class, 'deleteTodaySales'])->name('orders.delete-today-sales');
+        Route::delete('/orders/{order}', [AdminOrderController::class, 'destroy'])->name('orders.destroy');
+        Route::post('/orders/delete-daily-sales', [AdminOrderController::class, 'deleteDailySales'])->name('orders.delete-daily-sales');
 
         Route::get('/products', [AdminProductController::class, 'index'])->name('products.index');
         Route::get('/products/json', [AdminProductController::class, 'indexJson'])->name('products.index-json');
@@ -78,6 +80,11 @@ Route::prefix('staff')
     ->name('staff.')
     ->group(function () {
         Route::get('/dashboard', StaffDashboardController::class)->name('dashboard');
+        
+        Route::prefix('sales-session')->name('sales-session.')->group(function () {
+            Route::get('/active', [StaffShiftController::class, 'active'])->name('active');
+            Route::post('/close-and-create-new', [StaffShiftController::class, 'closeAndCreateNew'])->name('close-and-create-new');
+        });
 
         Route::get('/money-inventory', [StaffMoneyInventoryController::class, 'index'])->name('money-inventory.index');
         Route::post('/money-inventory', [StaffMoneyInventoryController::class, 'save'])->name('money-inventory.save');

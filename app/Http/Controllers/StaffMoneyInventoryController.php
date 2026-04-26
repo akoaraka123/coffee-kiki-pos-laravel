@@ -232,6 +232,11 @@ class StaffMoneyInventoryController extends Controller
                 $qty = 0;
             }
 
+            // Get active sales session for the user
+            $activeSession = Shift::where('user_id', $user->id)
+                ->where('status', 'ACTIVE')
+                ->first();
+
             MoneyInventory::query()->updateOrCreate(
                 [
                     'user_id' => $user->id,
@@ -240,17 +245,44 @@ class StaffMoneyInventoryController extends Controller
                 ],
                 [
                     'quantity' => $qty,
+                    'shift_id' => $activeSession ? $activeSession->shift_id : null,
+                    'business_date' => $activeSession ? $activeSession->business_date : null,
                 ]
             );
         }
 
-        if ($request->expectsJson()) {
-            return response()->json([
-                'message' => 'Money inventory saved.',
+        // Close current session and create new session
+        $activeSession = Shift::where('user_id', $user->id)
+            ->where('status', 'ACTIVE')
+            ->first();
+
+        if ($activeSession) {
+            $activeSession->update([
+                'ended_at' => Carbon::now(),
+                'status' => 'CLOSED',
+            ]);
+
+            // Create new active session
+            $businessDate = Carbon::now()->toDateString();
+            $newSalesSessionId = 'SESSION-' . Carbon::now()->format('YmdHis') . '-' . strtoupper(substr($user->name, 0, 5));
+
+            Shift::create([
+                'user_id' => $user->id,
+                'shift_id' => $newSalesSessionId,
+                'business_date' => $businessDate,
+                'started_at' => Carbon::now(),
+                'status' => 'ACTIVE',
+                'opening_cash' => null,
             ]);
         }
 
-        return redirect()->route('staff.money-inventory.index', ['date' => $date])->with('status', 'Money inventory saved.');
+        if ($request->expectsJson()) {
+            return response()->json([
+                'message' => 'Money inventory saved. New sales session started.',
+            ]);
+        }
+
+        return redirect()->route('staff.money-inventory.index', ['date' => $date])->with('status', 'Money inventory saved. New sales session started.');
     }
 
     public function storePaymentEntry(Request $request): JsonResponse
@@ -356,12 +388,19 @@ class StaffMoneyInventoryController extends Controller
         }
 
         $entry = DB::transaction(function () use ($user, $date, $paymentType, $receivedAmount, $cleanBreakdown, $orderId) {
+            // Get active shift for the user
+            $activeShift = Shift::where('user_id', $user->id)
+                ->where('status', 'ACTIVE')
+                ->first();
+
             $entryData = [
                 'user_id' => $user->id,
                 'date' => $date,
                 'payment_type' => $paymentType,
                 'received_amount' => $receivedAmount,
                 'order_id' => $orderId,
+                'shift_id' => $activeShift ? $activeShift->shift_id : null,
+                'business_date' => $activeShift ? $activeShift->business_date : null,
             ];
 
             // If this is a GCash entry with an order, copy GCash verification data from the order

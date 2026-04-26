@@ -599,6 +599,50 @@ window.posOrder = function posOrder(initialLayout) {
     };
 };
 
+Alpine.data('staffDashboard', () => ({
+    activeSalesSession: null,
+    staffName: '{{ auth()->user()->name ?? "" }}',
+    imagePreviewOpen: false,
+    imagePreviewUrl: '',
+
+    init() {
+        this.updateTime();
+        setInterval(() => this.updateTime(), 1000);
+    },
+
+    updateTime() {
+        const now = new Date();
+        this.currentTime = now.toLocaleString();
+    },
+
+    async checkActiveSalesSession() {
+        try {
+            const res = await fetch('/staff/sales-session/active', {
+                headers: {
+                    'Accept': 'application/json',
+                    'X-Requested-With': 'XMLHttpRequest',
+                },
+                credentials: 'same-origin',
+            });
+            if (!res.ok) return;
+            const data = await res.json().catch(() => ({}));
+            this.activeSalesSession = data.active_sales_session;
+        } catch (e) {
+            console.error('Error checking active sales session:', e);
+        }
+    },
+
+    openImagePreview(imageUrl) {
+        this.imagePreviewUrl = imageUrl;
+        this.imagePreviewOpen = true;
+    },
+
+    closeImagePreview() {
+        this.imagePreviewOpen = false;
+        this.imagePreviewUrl = '';
+    },
+}));
+
 Alpine.data('orderHistory', () => ({
     modalOpen: false,
     loading: false,
@@ -611,6 +655,7 @@ Alpine.data('orderHistory', () => ({
     },
     imagePreviewOpen: false,
     imagePreviewUrl: '',
+    deletingOrderId: null,
 
     buildUrl(template, orderId, itemId = null) {
         if (!template) return null;
@@ -843,6 +888,36 @@ Alpine.data('orderHistory', () => ({
         this.imagePreviewUrl = '';
     },
 
+    async deleteOrder(orderId) {
+        if (!confirm('Are you sure you want to delete this order? This action cannot be undone.')) return;
+        this.deletingOrderId = orderId;
+        try {
+            const token = document.querySelector('meta[name="csrf-token"]')?.getAttribute('content') || null;
+            if (!token) {
+                alert('Security token not found. Please refresh the page.');
+                return;
+            }
+            const res = await fetch(`/admin/orders/${orderId}`, {
+                method: 'DELETE',
+                headers: {
+                    'Accept': 'application/json',
+                    'X-CSRF-TOKEN': token,
+                },
+            });
+            const data = await res.json().catch(() => ({}));
+            if (res.ok) {
+                alert(data.message || 'Order deleted successfully.');
+                window.location.reload();
+            } else {
+                alert('Failed to delete: ' + (data.message || 'Unknown error'));
+            }
+        } catch (e) {
+            alert('Error: ' + e.message);
+        } finally {
+            this.deletingOrderId = null;
+        }
+    },
+
 }));
 
 Alpine.data('adminOrders', () => ({
@@ -855,6 +930,8 @@ Alpine.data('adminOrders', () => ({
     imagePreviewOpen: false,
     imagePreviewUrl: '',
     deletingToday: false,
+    deletingOrderId: null,
+    deletingDailySalesId: null,
 
     init() {
         this.detailsJsonUrl = this.$el.dataset.detailsJsonUrl || null;
@@ -891,23 +968,54 @@ Alpine.data('adminOrders', () => ({
         this.imagePreviewUrl = '';
     },
 
-    async deleteTodaySales(staffId) {
-        if (!confirm('Are you sure you want to delete all orders from today? This action cannot be undone.')) return;
-        this.deletingToday = true;
+    async deleteOrder(orderId) {
+        if (!confirm('Are you sure you want to delete this order? This action cannot be undone.')) return;
+        this.deletingOrderId = orderId;
         try {
             const token = document.querySelector('meta[name="csrf-token"]')?.getAttribute('content') || null;
             if (!token) {
                 alert('Security token not found. Please refresh the page.');
                 return;
             }
-            const res = await fetch('/admin/orders/delete-today-sales', {
+            const res = await fetch(`/admin/orders/${orderId}`, {
+                method: 'DELETE',
+                headers: {
+                    'Accept': 'application/json',
+                    'X-CSRF-TOKEN': token,
+                },
+            });
+            const data = await res.json().catch(() => ({}));
+            if (res.ok) {
+                alert(data.message || 'Order deleted successfully.');
+                window.location.reload();
+            } else {
+                alert('Failed to delete: ' + (data.message || 'Unknown error'));
+            }
+        } catch (e) {
+            alert('Error: ' + e.message);
+        } finally {
+            this.deletingOrderId = null;
+        }
+    },
+
+    async deleteDailySales(date, staffId) {
+        const key = `${date}-${staffId}`;
+        if (!confirm('Are you sure you want to delete this order record? This will also remove it from the Staff Orders page.')) return;
+        this.deletingDailySalesId = key;
+        try {
+            const token = document.querySelector('meta[name="csrf-token"]')?.getAttribute('content') || null;
+            if (!token) {
+                alert('Security token not found. Please refresh the page.');
+                return;
+            }
+            const res = await fetch('/admin/orders/delete-daily-sales', {
                 method: 'POST',
                 headers: {
                     'Accept': 'application/json',
                     'Content-Type': 'application/json',
                     'X-CSRF-TOKEN': token,
                 },
-                body: JSON.stringify({ staff: staffId || '' }),
+                body: JSON.stringify({ date: date, staff: staffId || '' }),
             });
             const data = await res.json().catch(() => ({}));
             if (res.ok) {
@@ -919,7 +1027,7 @@ Alpine.data('adminOrders', () => ({
         } catch (e) {
             alert('Error: ' + e.message);
         } finally {
-            this.deletingToday = false;
+            this.deletingDailySalesId = null;
         }
     },
 

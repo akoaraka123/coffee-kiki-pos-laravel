@@ -25,6 +25,8 @@ class Order extends Model
         'gcash_sender_name',
         'gcash_sender_mobile',
         'gcash_proof_image',
+        'shift_id',
+        'business_date',
     ];
 
     public function creator(): BelongsTo
