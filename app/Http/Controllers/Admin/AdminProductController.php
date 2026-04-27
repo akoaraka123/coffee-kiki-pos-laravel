@@ -23,9 +23,20 @@ class AdminProductController extends Controller
             ->orderBy('size')
             ->get(['id', 'name', 'category', 'size', 'price', 'image', 'is_active']);
 
+        $inventories = [];
+        try {
+            $inventories = Inventory::query()
+                ->get(['product_id', 'stock_quantity', 'low_stock_threshold']);
+        } catch (\Throwable $e) {
+            // Log error but continue
+            \Log::error('Inventory query failed: ' . $e->getMessage());
+        }
+
+        $inventoryMap = collect($inventories)->keyBy('product_id');
+
         $groups = $products
             ->groupBy(fn (Product $p) => $p->category . '||' . $p->name)
-            ->map(function ($items) {
+            ->map(function ($items) use ($inventoryMap) {
                 /** @var \Illuminate\Support\Collection<int, Product> $items */
                 $first = $items->first();
                 $key = ($first?->category ?? '') . '||' . ($first?->name ?? '');
@@ -39,18 +50,28 @@ class AdminProductController extends Controller
                         'image' => $first?->image,
                         'is_active' => (bool) ($first?->is_active),
                     ],
-                    'sizes' => $items->map(fn (Product $p) => [
-                        'id' => $p->id,
-                        'size' => $p->size,
-                        'price' => $p->price,
-                    ])->values(),
+                    'sizes' => $items->map(function (Product $p) use ($inventoryMap) {
+                        $inventory = $inventoryMap->get($p->id);
+                        return [
+                            'id' => $p->id,
+                            'size' => $p->size,
+                            'price' => $p->price,
+                            'stock_quantity' => $inventory ? $inventory->stock_quantity : 0,
+                            'low_stock_threshold' => $inventory ? $inventory->low_stock_threshold : 10,
+                        ];
+                    })->values(),
                     'editUrl' => $first ? route('admin.products.edit', $first) : null,
                     'deleteUrl' => $first ? route('admin.products.destroy', $first) : null,
                 ];
             })
             ->values();
 
-        $totalStock = Inventory::sum('stock_quantity');
+        $totalStock = 0;
+        try {
+            $totalStock = Inventory::sum('stock_quantity');
+        } catch (\Throwable $e) {
+            \Log::error('Inventory sum failed: ' . $e->getMessage());
+        }
 
         return view('admin.products.index', [
             'groups' => $groups,
@@ -66,9 +87,19 @@ class AdminProductController extends Controller
             ->orderBy('size')
             ->get(['id', 'name', 'category', 'size', 'price', 'image', 'is_active']);
 
+        $inventories = [];
+        try {
+            $inventories = Inventory::query()
+                ->get(['product_id', 'stock_quantity', 'low_stock_threshold']);
+        } catch (\Throwable $e) {
+            \Log::error('Inventory query failed: ' . $e->getMessage());
+        }
+
+        $inventoryMap = collect($inventories)->keyBy('product_id');
+
         $groups = $products
             ->groupBy(fn (Product $p) => $p->category . '||' . $p->name)
-            ->map(function ($items) {
+            ->map(function ($items) use ($inventoryMap) {
                 /** @var \Illuminate\Support\Collection<int, Product> $items */
                 $first = $items->first();
                 $key = ($first?->category ?? '') . '||' . ($first?->name ?? '');
@@ -82,18 +113,28 @@ class AdminProductController extends Controller
                         'image' => $first?->image,
                         'is_active' => (bool) ($first?->is_active),
                     ],
-                    'sizes' => $items->map(fn (Product $p) => [
-                        'id' => $p->id,
-                        'size' => $p->size,
-                        'price' => $p->price,
-                    ])->values(),
+                    'sizes' => $items->map(function (Product $p) use ($inventoryMap) {
+                        $inventory = $inventoryMap->get($p->id);
+                        return [
+                            'id' => $p->id,
+                            'size' => $p->size,
+                            'price' => $p->price,
+                            'stock_quantity' => $inventory ? $inventory->stock_quantity : 0,
+                            'low_stock_threshold' => $inventory ? $inventory->low_stock_threshold : 10,
+                        ];
+                    })->values(),
                     'editUrl' => $first ? route('admin.products.edit', $first) : null,
                     'deleteUrl' => $first ? route('admin.products.destroy', $first) : null,
                 ];
             })
             ->values();
 
-        $totalStock = Inventory::sum('stock_quantity');
+        $totalStock = 0;
+        try {
+            $totalStock = Inventory::sum('stock_quantity');
+        } catch (\Throwable $e) {
+            \Log::error('Inventory sum failed: ' . $e->getMessage());
+        }
 
         return response()->json([
             'groups' => $groups,
@@ -188,8 +229,15 @@ class AdminProductController extends Controller
         $imagePath = null;
         if ($request->hasFile('image')) {
             $file = $request->file('image');
+            
+            // Ensure public/products directory exists
+            $productsDir = public_path('products');
+            if (!file_exists($productsDir)) {
+                mkdir($productsDir, 0755, true);
+            }
+            
             $filename = Str::uuid()->toString() . '.' . $file->getClientOriginalExtension();
-            $file->move(public_path('products'), $filename);
+            $file->move($productsDir, $filename);
             $imagePath = 'products/' . $filename;
         }
 
@@ -366,8 +414,15 @@ class AdminProductController extends Controller
 
         if ($request->hasFile('image')) {
             $file = $request->file('image');
+            
+            // Ensure public/products directory exists
+            $productsDir = public_path('products');
+            if (!file_exists($productsDir)) {
+                mkdir($productsDir, 0755, true);
+            }
+            
             $filename = Str::uuid()->toString() . '.' . $file->getClientOriginalExtension();
-            $file->move(public_path('products'), $filename);
+            $file->move($productsDir, $filename);
             $imagePath = 'products/' . $filename;
         }
 

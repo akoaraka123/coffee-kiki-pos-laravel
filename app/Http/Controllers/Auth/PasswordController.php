@@ -18,7 +18,22 @@ class PasswordController extends Controller
     {
         $validated = $request->validateWithBag('updatePassword', [
             'current_password' => ['required', 'current_password'],
-            'password' => ['required', Password::defaults(), 'confirmed'],
+            'password' => [
+                'required',
+                'string',
+                'min:8',
+                'max:64',
+                'confirmed',
+                'regex:/^(?=.*[a-z])(?=.*[A-Z])(?=.*\d)[A-Za-z\d!@#$%^&*_.?-]+$/',
+            ],
+        ], [
+            'current_password.required' => 'Current password is required.',
+            'current_password.current_password' => 'Current password is incorrect.',
+            'password.required' => 'New password is required.',
+            'password.min' => 'Password must be at least 8 characters.',
+            'password.max' => 'Password must not exceed 64 characters.',
+            'password.confirmed' => 'Password confirmation does not match.',
+            'password.regex' => 'Password must be 8-64 characters and include uppercase, lowercase, and number. Only common symbols are allowed.',
         ]);
 
         $request->user()->update([

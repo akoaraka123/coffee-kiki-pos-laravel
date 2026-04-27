@@ -175,89 +175,56 @@
                             <div class="rounded-xl border border-white/10 bg-white/5 p-4">
                                 <div class="flex items-center justify-between gap-4">
                                     <div>
-                                        <div class="text-sm font-semibold">Money Inventory Breakdown</div>
-                                        <div class="mt-1 text-xs text-white/60">Cash denominations on hand</div>
-                                    </div>
-                                    <div class="text-sm font-semibold text-white">
-                                        Total: ₱<span x-text="formatPrice(dailyPayload.money_inventory?.total_cash || 0)"></span>
+                                        <div class="text-sm font-semibold">Saved Money Inventory Records</div>
+                                        <div class="mt-1 text-xs text-white/60">Saved grouped records from staff money inventory for this date.</div>
                                     </div>
                                 </div>
-                                <div class="mt-4 grid grid-cols-2 gap-2 sm:grid-cols-4 lg:grid-cols-6">
-                                    <template x-for="b in (dailyPayload.money_inventory?.breakdown || []).filter(x => (x.quantity || 0) > 0)" :key="'mi-' + b.denomination">
-                                        <div class="rounded-xl border border-white/10 bg-[#111]/40 px-3 py-2 text-xs text-white/80">
-                                            <div class="font-semibold" x-text="'₱' + Number(b.denomination || 0).toLocaleString()"></div>
-                                            <div class="text-white/60" x-text="'Qty: ' + Number(b.quantity || 0)"></div>
-                                        </div>
-                                    </template>
-                                    <template x-if="(dailyPayload.money_inventory?.breakdown || []).filter(x => (x.quantity || 0) > 0).length === 0">
-                                        <div class="col-span-2 sm:col-span-4 lg:grid-cols-6 rounded-xl border border-white/10 bg-[#111]/40 px-3 py-2 text-xs text-white/60">No money inventory saved.</div>
-                                    </template>
-                                </div>
-                            </div>
 
-                            <div class="rounded-xl border border-white/10 bg-white/5 p-4">
-                                <div class="flex items-center justify-between gap-4 mb-4">
-                                    <div>
-                                        <div class="text-sm font-semibold">GCash Verification</div>
-                                        <div class="mt-1 text-xs text-white/60">Verified GCash transactions</div>
-                                    </div>
-                                    <div class="text-sm font-semibold text-white">
-                                        Total: ₱<span x-text="formatPrice(dailyPayload.payment_inventory?.totals?.gcash || 0)"></span>
-                                    </div>
-                                </div>
-                                <template x-if="(dailyPayload.payment_inventory?.entries || []).filter(x => x.payment_type === 'gcash').length > 0">
-                                    <div class="space-y-3">
-                                        <template x-for="entry in (dailyPayload.payment_inventory?.entries || []).filter(x => x.payment_type === 'gcash')" :key="'gcash-' + entry.id">
-                                            <div class="rounded-xl border border-blue-500/20 bg-blue-500/5 p-3">
-                                                <div class="flex items-center justify-between gap-2 mb-2">
-                                                    <div class="text-xs text-white/60" x-text="'Order #' + (entry.order_number || '—')"></div>
-                                                    <div class="text-xs font-semibold text-blue-200">₱<span x-text="formatPrice(entry.received_amount)"></span></div>
-                                                </div>
-                                                <div class="grid grid-cols-1 gap-1 text-xs">
-                                                    <template x-if="entry.gcash_sender_name">
-                                                        <div class="flex justify-between">
-                                                            <span class="text-white/60">Sender:</span>
-                                                            <span class="text-white" x-text="entry.gcash_sender_name"></span>
-                                                        </div>
-                                                    </template>
-                                                    <template x-if="entry.gcash_reference_number">
-                                                        <div class="flex justify-between">
-                                                            <span class="text-white/60">Ref No:</span>
-                                                            <span class="text-white" x-text="entry.gcash_reference_number"></span>
-                                                        </div>
-                                                    </template>
-                                                    <template x-if="entry.gcash_sender_mobile">
-                                                        <div class="flex justify-between">
-                                                            <span class="text-white/60">Mobile:</span>
-                                                            <span class="text-white" x-text="entry.gcash_sender_mobile"></span>
-                                                        </div>
-                                                    </template>
-                                                    <template x-if="entry.verified_by">
-                                                        <div class="flex justify-between">
-                                                            <span class="text-white/60">Verified by:</span>
-                                                            <span class="text-white" x-text="entry.verified_by"></span>
-                                                        </div>
-                                                    </template>
-                                                    <template x-if="entry.verified_at">
-                                                        <div class="flex justify-between">
-                                                            <span class="text-white/60">Verified at:</span>
-                                                            <span class="text-white" x-text="entry.verified_at"></span>
-                                                        </div>
-                                                    </template>
-                                                </div>
-                                                <template x-if="entry.gcash_proof_image">
-                                                    <div class="mt-2">
-                                                        <button type="button" x-on:click="openImagePreview(entry.gcash_proof_image)" class="cursor-pointer">
-                                                            <img :src="entry.gcash_proof_image" alt="GCash Proof" class="max-h-32 rounded-lg border border-white/10 hover:border-blue-500/50 transition">
-                                                        </button>
-                                                    </div>
-                                                </template>
-                                            </div>
-                                        </template>
-                                    </div>
+                                <template x-if="(dailyPayload.saved_money_inventories || []).length === 0">
+                                    <div class="mt-4 rounded-xl border border-white/10 bg-[#111]/40 px-3 py-2 text-xs text-white/60">No saved money inventory record for this date.</div>
                                 </template>
-                                <template x-if="(dailyPayload.payment_inventory?.entries || []).filter(x => x.payment_type === 'gcash').length === 0">
-                                    <div class="rounded-xl border border-white/10 bg-[#111]/40 px-3 py-2 text-xs text-white/60">No GCash verifications saved.</div>
+
+                                <template x-if="(dailyPayload.saved_money_inventories || []).length > 0">
+                                    <div class="mt-4 max-h-72 overflow-y-auto overflow-x-auto rounded-xl border border-white/10 bg-[#111]/40">
+                                        <table class="min-w-full text-left text-sm">
+                                            <thead class="sticky top-0 z-10 bg-[#111] text-white/70">
+                                                <tr>
+                                                    <th class="px-3 py-2 text-xs font-semibold">Date</th>
+                                                    <th class="px-3 py-2 text-xs font-semibold">Time Saved</th>
+                                                    <th class="px-3 py-2 text-xs font-semibold">Staff</th>
+                                                    <th class="px-3 py-2 text-xs font-semibold">Total Sales</th>
+                                                    <th class="px-3 py-2 text-xs font-semibold">Cash</th>
+                                                    <th class="px-3 py-2 text-xs font-semibold">GCash</th>
+                                                    <th class="px-3 py-2 text-xs font-semibold">Difference</th>
+                                                    <th class="px-3 py-2 text-xs font-semibold">Status</th>
+                                                    <th class="px-3 py-2 text-xs font-semibold text-right">Action</th>
+                                                </tr>
+                                            </thead>
+                                            <tbody class="divide-y divide-white/10">
+                                                <template x-for="record in (dailyPayload.saved_money_inventories || [])" :key="'saved-mi-' + record.id">
+                                                    <tr class="hover:bg-white/5">
+                                                        <td class="px-3 py-2 text-xs text-white/80" x-text="formatDisplayDate(record.date)"></td>
+                                                        <td class="px-3 py-2 text-xs text-white/80" x-text="record.saved_at_display || formatEntryTime(record.saved_at)"></td>
+                                                        <td class="px-3 py-2 text-xs text-white/80" x-text="record.staff_name || dailyPayload.staff?.name || '—'"></td>
+                                                        <td class="px-3 py-2 text-xs font-semibold text-white">₱<span x-text="formatPrice(record.total_sales || 0)"></span></td>
+                                                        <td class="px-3 py-2 text-xs text-white/80">₱<span x-text="formatPrice(record.cash_total || 0)"></span></td>
+                                                        <td class="px-3 py-2 text-xs text-white/80">₱<span x-text="formatPrice(record.gcash_total || 0)"></span></td>
+                                                        <td class="px-3 py-2 text-xs font-semibold" x-bind:class="Number(record.difference || 0) >= 0 ? 'text-emerald-300' : 'text-rose-300'">₱<span x-text="formatPrice(record.difference || 0)"></span></td>
+                                                        <td class="px-3 py-2 text-xs text-white/80" x-text="String(record.status || 'saved').toUpperCase()"></td>
+                                                        <td class="px-3 py-2 text-right">
+                                                            <button
+                                                                type="button"
+                                                                class="inline-flex items-center justify-center rounded-lg bg-indigo-600 px-3 py-1.5 text-xs font-semibold text-white hover:bg-indigo-500"
+                                                                x-on:click="openSavedInventoryDetails(record)"
+                                                            >
+                                                                View
+                                                            </button>
+                                                        </td>
+                                                    </tr>
+                                                </template>
+                                            </tbody>
+                                        </table>
+                                    </div>
                                 </template>
                             </div>
 
@@ -452,6 +419,129 @@
                 <div class="relative w-full max-w-4xl">
                     <button type="button" class="absolute -top-12 right-0 inline-flex h-10 w-10 items-center justify-center rounded-full border border-white/10 bg-white/5 text-white/80 hover:bg-white/10" x-on:click="closeImagePreview()">✕</button>
                     <img :src="imagePreviewUrl" class="w-full rounded-xl border border-white/10 shadow-2xl" alt="Transaction Proof" />
+                </div>
+            </div>
+        </template>
+
+        <template x-if="savedInventoryModalOpen && selectedSavedInventory">
+            <div class="fixed inset-0 z-[70] flex items-center justify-center px-4">
+                <div class="fixed inset-0 bg-black/80 backdrop-blur-sm" x-transition.opacity x-on:click="closeSavedInventoryDetails()"></div>
+                <div class="relative w-full max-w-4xl max-h-[85vh] overflow-y-auto rounded-2xl border border-white/10 bg-[#111] p-6 shadow-2xl">
+                    <div class="flex items-center justify-between">
+                        <div>
+                            <div class="text-lg font-bold">Saved Money Inventory Details</div>
+                            <div class="mt-1 text-sm text-white/60">Detailed snapshot for the selected saved record.</div>
+                        </div>
+                        <button type="button" class="inline-flex h-9 w-9 items-center justify-center rounded-xl border border-white/10 bg-white/5 text-white/80 hover:bg-white/10" x-on:click="closeSavedInventoryDetails()">✕</button>
+                    </div>
+
+                    <div class="mt-6 grid grid-cols-2 gap-4 rounded-xl border border-white/10 bg-[#111]/40 p-4">
+                        <div>
+                            <div class="text-xs text-white/60">Date</div>
+                            <div class="mt-1 text-sm font-semibold text-white" x-text="formatDisplayDate(selectedSavedInventory.date)"></div>
+                        </div>
+                        <div>
+                            <div class="text-xs text-white/60">Time Saved</div>
+                            <div class="mt-1 text-sm font-semibold text-white" x-text="selectedSavedInventory.saved_at_display || formatEntryTime(selectedSavedInventory.saved_at)"></div>
+                        </div>
+                        <div>
+                            <div class="text-xs text-white/60">Saved By</div>
+                            <div class="mt-1 text-sm font-semibold text-white" x-text="selectedSavedInventory.staff_name || dailyPayload?.staff?.name || '—'"></div>
+                        </div>
+                        <div>
+                            <div class="text-xs text-white/60">Status</div>
+                            <div class="mt-1 text-sm font-semibold text-white" x-text="String(selectedSavedInventory.status || 'saved').toUpperCase()"></div>
+                        </div>
+                    </div>
+
+                    <div class="mt-4 grid grid-cols-2 gap-4 lg:grid-cols-3 rounded-xl border border-white/10 bg-[#111]/40 p-4">
+                        <div>
+                            <div class="text-xs text-white/60">Total Sales</div>
+                            <div class="mt-1 text-sm font-semibold text-white">₱<span x-text="formatPrice(selectedSavedInventory.total_sales || 0)"></span></div>
+                        </div>
+                        <div>
+                            <div class="text-xs text-white/60">Cash Total</div>
+                            <div class="mt-1 text-sm font-semibold text-emerald-300">₱<span x-text="formatPrice(selectedSavedInventory.cash_total || 0)"></span></div>
+                        </div>
+                        <div>
+                            <div class="text-xs text-white/60">GCash Total</div>
+                            <div class="mt-1 text-sm font-semibold text-sky-300">₱<span x-text="formatPrice(selectedSavedInventory.gcash_total || 0)"></span></div>
+                        </div>
+                        <div>
+                            <div class="text-xs text-white/60">Total Verified</div>
+                            <div class="mt-1 text-sm font-semibold text-white">₱<span x-text="formatPrice(selectedSavedInventory.total_verified || 0)"></span></div>
+                        </div>
+                        <div>
+                            <div class="text-xs text-white/60">Difference</div>
+                            <div class="mt-1 text-sm font-semibold" x-bind:class="Number(selectedSavedInventory.difference || 0) >= 0 ? 'text-emerald-300' : 'text-rose-300'">₱<span x-text="formatPrice(selectedSavedInventory.difference || 0)"></span></div>
+                        </div>
+                    </div>
+
+                    <div class="mt-4 rounded-xl border border-white/10 bg-[#111]/40 p-4">
+                        <div class="text-sm font-semibold">Cash denomination breakdown</div>
+                        <template x-if="Object.keys(selectedSavedInventory.cash_breakdown || {}).length === 0">
+                            <div class="mt-3 text-xs text-white/60">No cash breakdown saved.</div>
+                        </template>
+                        <template x-if="Object.keys(selectedSavedInventory.cash_breakdown || {}).length > 0">
+                            <div class="mt-3 grid grid-cols-2 gap-2 sm:grid-cols-3 lg:grid-cols-4">
+                                <template x-for="(qty, denom) in (selectedSavedInventory.cash_breakdown || {})" :key="'cash-denom-' + denom">
+                                    <div class="rounded-lg border border-white/10 bg-[#111]/60 px-3 py-2 text-xs">
+                                        <div class="font-semibold text-white" x-text="'₱' + Number(denom || 0).toLocaleString()"></div>
+                                        <div class="text-white/60" x-text="'Qty: ' + Number(qty || 0)"></div>
+                                    </div>
+                                </template>
+                            </div>
+                        </template>
+                    </div>
+
+                    <div class="mt-4 rounded-xl border border-white/10 bg-[#111]/40 p-4">
+                        <div class="text-sm font-semibold">GCash transaction details</div>
+                        <template x-if="(selectedSavedInventory.gcash_details || []).length === 0">
+                            <div class="mt-3 text-xs text-white/60">No GCash transaction details saved.</div>
+                        </template>
+                        <template x-if="(selectedSavedInventory.gcash_details || []).length > 0">
+                            <div class="mt-3 max-h-56 overflow-y-auto space-y-2">
+                                <template x-for="(detail, idx) in (selectedSavedInventory.gcash_details || [])" :key="'gcash-detail-' + idx">
+                                    <div class="rounded-lg border border-white/10 bg-[#111]/60 p-3 text-xs space-y-1">
+                                        <div class="flex justify-between"><span class="text-white/60">Sender</span><span class="text-white" x-text="detail.sender_name || '—'"></span></div>
+                                        <div class="flex justify-between"><span class="text-white/60">Reference</span><span class="text-white" x-text="detail.gcash_reference || '—'"></span></div>
+                                        <div class="flex justify-between"><span class="text-white/60">Mobile</span><span class="text-white" x-text="detail.mobile || '—'"></span></div>
+                                        <div class="flex justify-between"><span class="text-white/60">Order</span><span class="text-white" x-text="detail.order_number || '—'"></span></div>
+                                        <div class="flex justify-between"><span class="text-white/60">Amount</span><span class="text-sky-300">₱<span x-text="formatPrice(detail.amount || 0)"></span></span></div>
+                                    </div>
+                                </template>
+                            </div>
+                        </template>
+                    </div>
+
+                    <div class="mt-4 rounded-xl border border-white/10 bg-[#111]/40 p-4">
+                        <div class="text-sm font-semibold">Payment entries included</div>
+                        <template x-if="(selectedSavedInventory.payment_entries || []).length === 0">
+                            <div class="mt-3 text-xs text-white/60">No payment entries saved.</div>
+                        </template>
+                        <template x-if="(selectedSavedInventory.payment_entries || []).length > 0">
+                            <div class="mt-3 max-h-56 overflow-y-auto overflow-x-auto">
+                                <table class="min-w-full text-left text-xs">
+                                    <thead class="sticky top-0 bg-[#111] text-white/70">
+                                        <tr>
+                                            <th class="px-2 py-2">Type</th>
+                                            <th class="px-2 py-2">Time</th>
+                                            <th class="px-2 py-2">Amount</th>
+                                        </tr>
+                                    </thead>
+                                    <tbody class="divide-y divide-white/10">
+                                        <template x-for="entry in (selectedSavedInventory.payment_entries || [])" :key="'saved-entry-' + entry.id">
+                                            <tr>
+                                                <td class="px-2 py-2 text-white/80" x-text="String(entry.payment_type || '—').toUpperCase()"></td>
+                                                <td class="px-2 py-2 text-white/80" x-text="formatEntryTime(entry.created_at)"></td>
+                                                <td class="px-2 py-2 text-white">₱<span x-text="formatPrice(entry.received_amount || 0)"></span></td>
+                                            </tr>
+                                        </template>
+                                    </tbody>
+                                </table>
+                            </div>
+                        </template>
+                    </div>
                 </div>
             </div>
         </template>

@@ -46,6 +46,9 @@
                             <span class="inline-flex items-center rounded-full border border-white/10 bg-white/5 px-3 py-1 text-xs font-semibold text-white/80">
                                 {{ Auth::user()->role === 'admin' ? 'Admin' : 'Staff' }}
                             </span>
+                            <div class="h-9 w-9 rounded-full bg-gradient-to-br from-amber-500 to-amber-700 flex items-center justify-center shadow-lg">
+                                <span class="text-sm font-bold text-white">{{ strtoupper(substr(Auth::user()->name, 0, 1)) }}</span>
+                            </div>
                         </div>
                     </div>
                 </header>
@@ -96,6 +99,11 @@
                                     <a href="{{ $isAdmin ? route('admin.inventory.index') : route('staff.inventory.index') }}" class="group flex items-center gap-3 rounded-xl px-4 py-3 text-sm {{ request()->routeIs('admin.inventory.*') || request()->routeIs('staff.inventory.*') ? 'bg-white/10 text-white' : 'text-white/70 hover:bg-white/5 hover:text-white' }}" :title="(isDesktop && sidebarCollapsed) ? 'Inventory' : ''">
                                         <span class="grid h-9 w-9 place-items-center rounded-xl border border-white/10 bg-white/5 text-white/80 group-hover:bg-white/10">I</span>
                                         <span class="font-medium" x-show="!(isDesktop && sidebarCollapsed)">Inventory</span>
+                                    </a>
+
+                                    <a href="{{ route('profile.edit') }}" class="group flex items-center gap-3 rounded-xl px-4 py-3 text-sm {{ request()->routeIs('profile.*') ? 'bg-white/10 text-white' : 'text-white/70 hover:bg-white/5 hover:text-white' }}" :title="(isDesktop && sidebarCollapsed) ? 'Settings' : ''">
+                                        <span class="grid h-9 w-9 place-items-center rounded-xl border border-white/10 bg-white/5 text-white/80 group-hover:bg-white/10">S</span>
+                                        <span class="font-medium" x-show="!(isDesktop && sidebarCollapsed)">Settings</span>
                                     </a>
 
                                     @if ($isAdmin)

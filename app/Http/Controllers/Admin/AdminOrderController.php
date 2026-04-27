@@ -8,6 +8,7 @@ use App\Models\MoneyInventory;
 use App\Models\Order;
 use App\Models\PaymentEntry;
 use App\Models\PaymentEntryItem;
+use App\Models\SavedMoneyInventory;
 use App\Models\Shift;
 use App\Models\User;
 use Carbon\Carbon;
@@ -430,6 +431,16 @@ class AdminOrderController extends Controller
             ->where('business_date', $date)
             ->first(['shift_id', 'started_at', 'ended_at', 'status', 'opening_cash', 'closing_cash']);
 
+        $savedInventoryRows = SavedMoneyInventory::query()
+            ->where('user_id', $staff->id)
+            ->where(function ($q) use ($date) {
+                $q->whereDate('business_date', $date)
+                    ->orWhereDate('date', $date);
+            })
+            ->with(['user:id,name'])
+            ->latest('saved_at')
+            ->get();
+
         return response()->json([
             'staff' => [
                 'id' => (int) $staff->id,
@@ -493,6 +504,24 @@ class AdminOrderController extends Controller
                     ];
                 })->values()->all(),
             ],
+            'saved_money_inventories' => $savedInventoryRows->map(function (SavedMoneyInventory $s) {
+                return [
+                    'id' => (int) $s->id,
+                    'date' => $s->date?->toDateString(),
+                    'saved_at' => $s->saved_at?->toIso8601String(),
+                    'saved_at_display' => $this->formatHumanDateTime($s->saved_at ? Carbon::instance($s->saved_at) : null),
+                    'staff_name' => $s->user?->name,
+                    'total_sales' => (float) $s->total_sales,
+                    'cash_total' => (float) $s->cash_total,
+                    'gcash_total' => (float) $s->gcash_total,
+                    'total_verified' => (float) $s->total_verified,
+                    'difference' => (float) $s->difference,
+                    'status' => (string) $s->status,
+                    'cash_breakdown' => is_array($s->cash_breakdown) ? $s->cash_breakdown : [],
+                    'gcash_details' => is_array($s->gcash_details) ? $s->gcash_details : [],
+                    'payment_entries' => is_array($s->payment_entries) ? $s->payment_entries : [],
+                ];
+            })->values()->all(),
             'orders' => $orders->map(function (Order $o) {
                 $total = (float) ($o->total_amount ?? $o->total ?? 0);
                 $gcashProofImageUrl = null;

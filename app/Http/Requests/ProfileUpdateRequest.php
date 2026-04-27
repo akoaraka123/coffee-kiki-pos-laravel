@@ -16,16 +16,40 @@ class ProfileUpdateRequest extends FormRequest
     public function rules(): array
     {
         return [
-            'name' => ['required', 'string', 'max:255'],
+            'name' => [
+                'required',
+                'string',
+                'min:2',
+                'max:100',
+                'regex:/^[A-Za-zÑñ .\'-]+$/',
+            ],
             'email' => [
                 'required',
                 'string',
-                'lowercase',
                 'email',
                 'max:255',
                 Rule::unique(User::class)->ignore($this->user()->id),
             ],
             'pos_layout' => ['nullable', 'string', Rule::in(['left', 'right'])],
         ];
+    }
+
+    public function messages(): array
+    {
+        return [
+            'name.regex' => 'Name may only contain letters, spaces, Ñ, ñ, hyphen, apostrophe, and period.',
+            'name.min' => 'Name must be at least 2 characters.',
+            'name.max' => 'Name must not exceed 100 characters.',
+            'email.email' => 'Please enter a valid email address.',
+            'email.max' => 'Email must not exceed 255 characters.',
+        ];
+    }
+
+    protected function prepareForValidation(): void
+    {
+        $this->merge([
+            'name' => trim($this->name),
+            'email' => strtolower(trim($this->email)),
+        ]);
     }
 }

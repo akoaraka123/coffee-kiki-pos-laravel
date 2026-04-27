@@ -6,6 +6,8 @@ use App\Models\MoneyInventory;
 use App\Models\Order;
 use App\Models\PaymentEntry;
 use App\Models\PaymentEntryItem;
+use App\Models\SavedMoneyInventory;
+use App\Models\Shift;
 use Carbon\Carbon;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\RedirectResponse;
@@ -19,6 +21,109 @@ class StaffMoneyInventoryController extends Controller
     private const DENOMINATIONS = [1000, 500, 200, 100, 50, 20, 10, 1];
 
     private const PAYMENT_DENOMINATIONS = [1000, 500, 200, 100, 50, 20, 10, 5, 1];
+
+    private function parseDateString(mixed $raw): ?string
+    {
+        if (!is_string($raw) || trim($raw) === '') {
+            return null;
+        }
+
+        try {
+            return Carbon::parse($raw)->toDateString();
+        } catch (\Throwable $e) {
+            return null;
+        }
+    }
+
+    private function resolveActiveShift(?int $userId): ?Shift
+    {
+        if (!$userId) {
+            return null;
+        }
+
+        return Shift::query()
+            ->where('user_id', $userId)
+            ->where('status', 'ACTIVE')
+            ->latest('started_at')
+            ->first();
+    }
+
+    private function resolveViewBusinessDate(Request $request, ?int $userId): string
+    {
+        $requested = $this->parseDateString($request->query('date'));
+        if ($requested) {
+            return $requested;
+        }
+
+        $activeShift = $this->resolveActiveShift($userId);
+        if ($activeShift?->business_date) {
+            return Carbon::parse($activeShift->business_date)->toDateString();
+        }
+
+        return Carbon::today()->toDateString();
+    }
+
+    private function resolveWriteBusinessDate(Request $request, ?int $userId): string
+    {
+        $activeShift = $this->resolveActiveShift($userId);
+        if ($activeShift?->business_date) {
+            return Carbon::parse($activeShift->business_date)->toDateString();
+        }
+
+        $requested = $this->parseDateString($request->input('date'));
+        if ($requested) {
+            return $requested;
+        }
+
+        return Carbon::today()->toDateString();
+    }
+
+    private function applyOrderBusinessDateFilter($query, string $businessDate): void
+    {
+        $query->where(function ($q) use ($businessDate) {
+            $q->whereDate('business_date', $businessDate)
+                ->orWhere(function ($legacy) use ($businessDate) {
+                    $legacy->whereNull('business_date')
+                        ->whereDate('created_at', $businessDate);
+                });
+        });
+    }
+
+    private function applyPaymentEntryBusinessDateFilter($query, string $businessDate): void
+    {
+        $query->where(function ($q) use ($businessDate) {
+            $q->whereDate('business_date', $businessDate)
+                ->orWhere(function ($legacy) use ($businessDate) {
+                    $legacy->whereNull('business_date')
+                        ->where(function ($legacyDate) use ($businessDate) {
+                            $legacyDate->whereDate('date', $businessDate)
+                                ->orWhereDate('created_at', $businessDate);
+                        });
+                });
+        });
+    }
+
+    private function applyMoneyInventoryBusinessDateFilter($query, string $businessDate): void
+    {
+        $query->where(function ($q) use ($businessDate) {
+            $q->whereDate('business_date', $businessDate)
+                ->orWhere(function ($legacy) use ($businessDate) {
+                    $legacy->whereNull('business_date')
+                        ->whereDate('date', $businessDate);
+                });
+        });
+    }
+
+    private function applySavedInventoryBusinessDateFilter($query, string $businessDate): void
+    {
+        $query->where(function ($q) use ($businessDate) {
+            $q->whereDate('business_date', $businessDate)
+                ->orWhere(function ($legacy) use ($businessDate) {
+                    $legacy->whereNull('business_date')
+                        ->whereDate('date', $businessDate);
+                });
+        });
+    }
 
     private function resolveSelectedDate(Request $request): string
     {
@@ -55,7 +160,7 @@ class StaffMoneyInventoryController extends Controller
             return redirect()->route('profile.edit')->with('status', 'Please Clock Out to access Money Inventory.');
         }
 
-        $date = $this->resolveSelectedDate($request);
+        $date = $this->resolveViewBusinessDate($request, $user?->id);
 
         $dateDisplay = $date;
         try {
@@ -64,10 +169,10 @@ class StaffMoneyInventoryController extends Controller
             $dateDisplay = $date;
         }
 
-        $existing = MoneyInventory::query()
-            ->where('user_id', $user->id)
-            ->whereDate('date', $date)
-            ->get(['denomination', 'quantity']);
+        $existingQuery = MoneyInventory::query()
+            ->where('user_id', $user->id);
+        $this->applyMoneyInventoryBusinessDateFilter($existingQuery, $date);
+        $existing = $existingQuery->get(['denomination', 'quantity']);
 
         $qtyByDenom = $existing->mapWithKeys(function (MoneyInventory $row) {
             return [(int) $row->denomination => (int) $row->quantity];
@@ -94,8 +199,8 @@ class StaffMoneyInventoryController extends Controller
 
         $basePaidOrders = Order::query()
             ->where('created_by', $user->id)
-            ->where('status', 'paid')
-            ->whereDate('created_at', $date);
+            ->where('status', 'paid');
+        $this->applyOrderBusinessDateFilter($basePaidOrders, $date);
 
         if ($reconciledAt) {
             $basePaidOrders->where('created_at', '>', $reconciledAt);
@@ -115,34 +220,34 @@ class StaffMoneyInventoryController extends Controller
 
         $reconciledAtIso = $reconciledAt ? $reconciledAt->toIso8601String() : null;
 
-        $allDayTotalSales = (float) Order::query()
+        $allDayOrdersQuery = Order::query()
             ->where('created_by', $user->id)
-            ->where('status', 'paid')
-            ->whereDate('created_at', $date)
-            ->sum('total_amount');
+            ->where('status', 'paid');
+        $this->applyOrderBusinessDateFilter($allDayOrdersQuery, $date);
+        $allDayTotalSales = (float) $allDayOrdersQuery->sum('total_amount');
 
         $lowerTodaysTotalSales = $allDayTotalSales;
 
-        $paymentEntries = PaymentEntry::query()
+        $paymentEntriesQuery = PaymentEntry::query()
             ->where('user_id', $user->id)
-            ->whereDate('date', $date)
             ->with(['items' => function ($q) {
                 $q->orderByDesc('denomination');
             }])
-            ->latest()
-            ->get(['id', 'user_id', 'date', 'payment_type', 'received_amount', 'created_at', 'order_id']);
+            ->latest();
+        $this->applyPaymentEntryBusinessDateFilter($paymentEntriesQuery, $date);
+        $paymentEntries = $paymentEntriesQuery->get(['id', 'user_id', 'date', 'business_date', 'payment_type', 'received_amount', 'created_at', 'order_id']);
 
         // Fetch GCash orders for the current date
         $gcashOrders = Order::query()
             ->where('created_by', $user->id)
             ->where('status', 'paid')
             ->where('payment_type', 'gcash')
-            ->whereDate('created_at', $date)
             ->with(['items' => function ($q) {
                 $q->select(['id', 'order_id', 'name', 'price', 'quantity']);
             }])
-            ->orderBy('created_at')
-            ->get(['id', 'order_number', 'total_amount', 'created_at', 'gcash_reference', 'gcash_sender_name', 'gcash_sender_mobile']);
+            ->orderBy('created_at');
+        $this->applyOrderBusinessDateFilter($gcashOrders, $date);
+        $gcashOrders = $gcashOrders->get(['id', 'order_number', 'total_amount', 'created_at', 'gcash_reference', 'gcash_sender_name', 'gcash_sender_mobile']);
 
         // Get confirmed order IDs from payment entries
         $confirmedOrderIds = $paymentEntries
@@ -155,6 +260,14 @@ class StaffMoneyInventoryController extends Controller
         $gcashOrders = $gcashOrders->reject(function ($order) use ($confirmedOrderIds) {
             return in_array($order->id, $confirmedOrderIds);
         })->values();
+
+        // Fetch saved money inventory records
+        $savedInventoriesQuery = SavedMoneyInventory::query()
+            ->where('user_id', $user->id)
+            ->with(['user:id,name'])
+            ->latest('saved_at');
+        $this->applySavedInventoryBusinessDateFilter($savedInventoriesQuery, $date);
+        $savedInventories = $savedInventoriesQuery->get();
 
         if ($request->expectsJson()) {
             return response()->json([
@@ -188,6 +301,7 @@ class StaffMoneyInventoryController extends Controller
             'paymentEntries' => $paymentEntries,
             'gcashOrders' => $gcashOrders,
             'confirmedOrderIds' => $confirmedOrderIds,
+            'savedInventories' => $savedInventories,
         ]);
     }
 
@@ -206,18 +320,7 @@ class StaffMoneyInventoryController extends Controller
             return redirect()->route('profile.edit')->with('status', 'Please Clock Out to access Money Inventory.');
         }
 
-        $date = null;
-        $rawDate = $request->input('date');
-        if (is_string($rawDate) && trim($rawDate) !== '') {
-            try {
-                $date = Carbon::parse($rawDate)->toDateString();
-            } catch (\Throwable $e) {
-                $date = null;
-            }
-        }
-        if (!$date) {
-            $date = $this->resolveSelectedDate($request);
-        }
+        $date = $this->resolveWriteBusinessDate($request, $user?->id);
 
         $validated = $request->validate([
             'quantities' => ['required', 'array'],
@@ -233,9 +336,7 @@ class StaffMoneyInventoryController extends Controller
             }
 
             // Get active sales session for the user
-            $activeSession = Shift::where('user_id', $user->id)
-                ->where('status', 'ACTIVE')
-                ->first();
+            $activeSession = $this->resolveActiveShift($user->id);
 
             MoneyInventory::query()->updateOrCreate(
                 [
@@ -249,6 +350,131 @@ class StaffMoneyInventoryController extends Controller
                     'business_date' => $activeSession ? $activeSession->business_date : null,
                 ]
             );
+        }
+
+        // Group payment entries into saved money inventory record
+        $paymentEntriesQuery = PaymentEntry::query()
+            ->where('user_id', $user->id)
+            ->with(['items', 'order'])
+            ->latest();
+        $this->applyPaymentEntryBusinessDateFilter($paymentEntriesQuery, $date);
+        $paymentEntries = $paymentEntriesQuery->get();
+
+        $savedInventoryPayload = null;
+        $clearedEntriesCount = 0;
+
+        if ($paymentEntries->isNotEmpty()) {
+            DB::transaction(function () use ($user, $date, $paymentEntries, &$savedInventoryPayload, &$clearedEntriesCount) {
+                // Calculate totals
+                $cashTotal = $paymentEntries->where('payment_type', 'cash')->sum('received_amount');
+                $gcashTotal = $paymentEntries->where('payment_type', 'gcash')->sum('received_amount');
+                $totalVerified = $cashTotal + $gcashTotal;
+
+                // Get today's total sales
+                $basePaidOrders = Order::query()
+                    ->where('created_by', $user->id)
+                    ->where('status', 'paid');
+                $this->applyOrderBusinessDateFilter($basePaidOrders, $date);
+                $todaysTotalSales = (float) (clone $basePaidOrders)->sum('total_amount');
+
+                $difference = $todaysTotalSales - $totalVerified;
+
+                // Build cash breakdown
+                $cashBreakdown = [];
+                $cashEntries = $paymentEntries->where('payment_type', 'cash');
+                foreach ($cashEntries as $entry) {
+                    foreach ($entry->items as $item) {
+                        $denom = (int) $item->denomination;
+                        $qty = (int) $item->quantity;
+                        if (!isset($cashBreakdown[$denom])) {
+                            $cashBreakdown[$denom] = 0;
+                        }
+                        $cashBreakdown[$denom] += $qty;
+                    }
+                }
+
+                // Build GCash details
+                $gcashDetails = [];
+                $gcashEntries = $paymentEntries->where('payment_type', 'gcash');
+                foreach ($gcashEntries as $entry) {
+                    $gcashDetails[] = [
+                        'sender_name' => $entry->gcash_sender_name,
+                        'gcash_reference' => $entry->gcash_reference_number,
+                        'mobile' => $entry->gcash_sender_mobile,
+                        'order_number' => $entry->order ? $entry->order->order_number : null,
+                        'amount' => (int) $entry->received_amount,
+                    ];
+                }
+
+                // Build payment entries data
+                $paymentEntriesData = $paymentEntries->map(function ($entry) {
+                    return [
+                        'id' => (int) $entry->id,
+                        'payment_type' => (string) $entry->payment_type,
+                        'received_amount' => (int) $entry->received_amount,
+                        'created_at' => $entry->created_at?->toIso8601String(),
+                        'items' => $entry->items->map(fn ($item) => [
+                            'denomination' => (int) $item->denomination,
+                            'quantity' => (int) $item->quantity,
+                        ])->values()->all(),
+                    ];
+                })->values()->all();
+
+                // Get active session
+                $activeSession = $this->resolveActiveShift($user->id);
+
+                // Create saved money inventory record
+                $savedInventory = SavedMoneyInventory::create([
+                    'user_id' => $user->id,
+                    'date' => $date,
+                    'saved_at' => now(),
+                    'total_sales' => $todaysTotalSales,
+                    'cash_total' => $cashTotal,
+                    'gcash_total' => $gcashTotal,
+                    'total_verified' => $totalVerified,
+                    'difference' => $difference,
+                    'status' => 'saved',
+                    'cash_breakdown' => $cashBreakdown,
+                    'gcash_details' => $gcashDetails,
+                    'payment_entries' => $paymentEntriesData,
+                    'shift_id' => $activeSession ? $activeSession->shift_id : null,
+                    'business_date' => $activeSession ? $activeSession->business_date : null,
+                ]);
+
+                // Delete the payment entries after saving
+                $clearedEntriesCount = PaymentEntry::query()
+                    ->where('user_id', $user->id)
+                    ->where(function ($q) use ($date) {
+                        $q->whereDate('business_date', $date)
+                            ->orWhere(function ($legacy) use ($date) {
+                                $legacy->whereNull('business_date')
+                                    ->where(function ($legacyDate) use ($date) {
+                                        $legacyDate->whereDate('date', $date)
+                                            ->orWhereDate('created_at', $date);
+                                    });
+                            });
+                    })
+                    ->delete();
+
+                $savedInventory->loadMissing(['user:id,name']);
+                $savedInventoryPayload = [
+                    'id' => (int) $savedInventory->id,
+                    'date' => $savedInventory->date?->toDateString(),
+                    'saved_at' => $savedInventory->saved_at?->toIso8601String(),
+                    'total_sales' => (float) $savedInventory->total_sales,
+                    'cash_total' => (float) $savedInventory->cash_total,
+                    'gcash_total' => (float) $savedInventory->gcash_total,
+                    'total_verified' => (float) $savedInventory->total_verified,
+                    'difference' => (float) $savedInventory->difference,
+                    'status' => (string) $savedInventory->status,
+                    'cash_breakdown' => $savedInventory->cash_breakdown,
+                    'gcash_details' => $savedInventory->gcash_details,
+                    'payment_entries' => $savedInventory->payment_entries,
+                    'user' => $savedInventory->user ? [
+                        'name' => (string) $savedInventory->user->name,
+                    ] : null,
+                ];
+            });
         }
 
         // Close current session and create new session
@@ -279,6 +505,8 @@ class StaffMoneyInventoryController extends Controller
         if ($request->expectsJson()) {
             return response()->json([
                 'message' => 'Money inventory saved. New sales session started.',
+                'saved_inventory' => $savedInventoryPayload,
+                'cleared_entries_count' => (int) $clearedEntriesCount,
             ]);
         }
 
@@ -293,18 +521,7 @@ class StaffMoneyInventoryController extends Controller
         }
 
         $user = $request->user();
-        $date = null;
-        $rawDate = $request->input('date');
-        if (is_string($rawDate) && trim($rawDate) !== '') {
-            try {
-                $date = Carbon::parse($rawDate)->toDateString();
-            } catch (\Throwable $e) {
-                $date = null;
-            }
-        }
-        if (!$date) {
-            $date = $this->resolveSelectedDate($request);
-        }
+        $date = $this->resolveWriteBusinessDate($request, $user?->id);
 
         $validated = $request->validate([
             'payment_type' => ['required', 'string', 'in:cash,gcash'],
@@ -361,7 +578,13 @@ class StaffMoneyInventoryController extends Controller
                 ->where('created_by', $user->id)
                 ->where('payment_type', $paymentType)
                 ->where('status', 'paid')
-                ->whereDate('created_at', $date)
+                ->where(function ($q) use ($date) {
+                    $q->whereDate('business_date', $date)
+                        ->orWhere(function ($legacy) use ($date) {
+                            $legacy->whereNull('business_date')
+                                ->whereDate('created_at', $date);
+                        });
+                })
                 ->first();
 
             if (!$order) {
@@ -389,9 +612,7 @@ class StaffMoneyInventoryController extends Controller
 
         $entry = DB::transaction(function () use ($user, $date, $paymentType, $receivedAmount, $cleanBreakdown, $orderId) {
             // Get active shift for the user
-            $activeShift = Shift::where('user_id', $user->id)
-                ->where('status', 'ACTIVE')
-                ->first();
+            $activeShift = $this->resolveActiveShift($user->id);
 
             $entryData = [
                 'user_id' => $user->id,
@@ -409,7 +630,13 @@ class StaffMoneyInventoryController extends Controller
                     ->where('created_by', $user->id)
                     ->where('payment_type', 'gcash')
                     ->where('status', 'paid')
-                    ->whereDate('created_at', $date)
+                    ->where(function ($q) use ($date) {
+                        $q->whereDate('business_date', $date)
+                            ->orWhere(function ($legacy) use ($date) {
+                                $legacy->whereNull('business_date')
+                                    ->whereDate('created_at', $date);
+                            });
+                    })
                     ->first();
 
                 if ($order) {
@@ -472,8 +699,11 @@ class StaffMoneyInventoryController extends Controller
             ], 403);
         }
 
-        $today = Carbon::today()->toDateString();
-        if ($entry->date?->toDateString() !== $today) {
+        $businessDate = $this->resolveWriteBusinessDate($request, $user?->id);
+        $entryBusinessDate = $entry->business_date?->toDateString()
+            ?? $entry->date?->toDateString()
+            ?? $entry->created_at?->toDateString();
+        if ($entryBusinessDate !== $businessDate) {
             return response()->json([
                 'message' => 'Only today\'s entries can be edited.',
             ], 422);
@@ -559,7 +789,7 @@ class StaffMoneyInventoryController extends Controller
         }
 
         $user = $request->user();
-        $today = Carbon::today()->toDateString();
+        $businessDate = $this->resolveWriteBusinessDate($request, $user?->id);
         $paymentType = $request->input('payment_type', 'all'); // 'cash', 'gcash', or 'all'
 
         $reconciledAt = now();
@@ -577,7 +807,7 @@ class StaffMoneyInventoryController extends Controller
             // Get existing reconciliation data
             $existing = DB::table('daily_sales_reconciliations')
                 ->where('user_id', $user->id)
-                ->where('date', $today)
+                ->where('date', $businessDate)
                 ->first();
 
             if ($existing) {
@@ -587,14 +817,20 @@ class StaffMoneyInventoryController extends Controller
 
                 DB::table('daily_sales_reconciliations')
                     ->where('user_id', $user->id)
-                    ->where('date', $today)
+                    ->where('date', $businessDate)
                     ->update([
                         'reconciled_at' => $reconciledAt,
                         'reconciliation_data' => json_encode($existingData),
                         'total_sales' => Order::query()
                             ->where('created_by', $user->id)
                             ->where('status', 'paid')
-                            ->whereDate('created_at', $today)
+                            ->where(function ($q) use ($businessDate) {
+                                $q->whereDate('business_date', $businessDate)
+                                    ->orWhere(function ($legacy) use ($businessDate) {
+                                        $legacy->whereNull('business_date')
+                                            ->whereDate('created_at', $businessDate);
+                                    });
+                            })
                             ->where('created_at', '<=', $reconciledAt)
                             ->sum('total_amount'),
                     ]);
@@ -602,13 +838,19 @@ class StaffMoneyInventoryController extends Controller
                 // Create new record
                 DB::table('daily_sales_reconciliations')->insert([
                     'user_id' => $user->id,
-                    'date' => $today,
+                    'date' => $businessDate,
                     'reconciled_at' => $reconciledAt,
                     'reconciliation_data' => json_encode([$paymentType => $reconciliationData]),
                     'total_sales' => Order::query()
                         ->where('created_by', $user->id)
                         ->where('status', 'paid')
-                        ->whereDate('created_at', $today)
+                        ->where(function ($q) use ($businessDate) {
+                            $q->whereDate('business_date', $businessDate)
+                                ->orWhere(function ($legacy) use ($businessDate) {
+                                    $legacy->whereNull('business_date')
+                                        ->whereDate('created_at', $businessDate);
+                                });
+                        })
                         ->where('created_at', '<=', $reconciledAt)
                         ->sum('total_amount'),
                 ]);
@@ -618,14 +860,20 @@ class StaffMoneyInventoryController extends Controller
             DB::table('daily_sales_reconciliations')->updateOrInsert(
                 [
                     'user_id' => $user->id,
-                    'date' => $today,
+                    'date' => $businessDate,
                 ],
                 [
                     'reconciled_at' => $reconciledAt,
                     'total_sales' => Order::query()
                         ->where('created_by', $user->id)
                         ->where('status', 'paid')
-                        ->whereDate('created_at', $today)
+                        ->where(function ($q) use ($businessDate) {
+                            $q->whereDate('business_date', $businessDate)
+                                ->orWhere(function ($legacy) use ($businessDate) {
+                                    $legacy->whereNull('business_date')
+                                        ->whereDate('created_at', $businessDate);
+                                });
+                        })
                         ->where('created_at', '<=', $reconciledAt)
                         ->sum('total_amount'),
                 ]
@@ -647,17 +895,17 @@ class StaffMoneyInventoryController extends Controller
         }
 
         $user = $request->user();
-        $today = Carbon::today()->toDateString();
+        $businessDate = $this->resolveWriteBusinessDate($request, $user?->id);
 
         DB::table('daily_sales_reconciliations')
             ->where('user_id', $user->id)
-            ->where('date', $today)
+            ->where('date', $businessDate)
             ->delete();
 
         $basePaidOrders = Order::query()
             ->where('created_by', $user->id)
-            ->where('status', 'paid')
-            ->whereDate('created_at', $today);
+            ->where('status', 'paid');
+        $this->applyOrderBusinessDateFilter($basePaidOrders, $businessDate);
 
         $todaysTotalSales = (float) (clone $basePaidOrders)->sum('total_amount');
         $todaysCashSales = (float) (clone $basePaidOrders)->where('payment_type', 'cash')->sum('total_amount');
@@ -687,8 +935,11 @@ class StaffMoneyInventoryController extends Controller
             ], 403);
         }
 
-        $today = Carbon::today()->toDateString();
-        if ($entry->date?->toDateString() !== $today) {
+        $businessDate = $this->resolveWriteBusinessDate($request, $user?->id);
+        $entryBusinessDate = $entry->business_date?->toDateString()
+            ?? $entry->date?->toDateString()
+            ?? $entry->created_at?->toDateString();
+        if ($entryBusinessDate !== $businessDate) {
             return response()->json([
                 'message' => 'Only today\'s entries can be deleted.',
             ], 422);
@@ -699,6 +950,44 @@ class StaffMoneyInventoryController extends Controller
         return response()->json([
             'message' => 'Payment entry deleted.',
             'id' => (int) $entry->id,
+        ]);
+    }
+
+    public function showSavedInventory(Request $request, SavedMoneyInventory $savedInventory): JsonResponse
+    {
+        $blocked = $this->ensureClockedOut($request);
+        if ($blocked) {
+            return $blocked;
+        }
+
+        $user = $request->user();
+        if (! $user || (int) $savedInventory->user_id !== (int) $user->id) {
+            return response()->json([
+                'message' => 'Not authorized.',
+            ], 403);
+        }
+
+        $savedInventory->loadMissing(['user:id,name']);
+
+        return response()->json([
+            'saved_inventory' => [
+                'id' => (int) $savedInventory->id,
+                'date' => $savedInventory->date?->toDateString(),
+                'saved_at' => $savedInventory->saved_at?->toIso8601String(),
+                'total_sales' => (float) $savedInventory->total_sales,
+                'cash_total' => (float) $savedInventory->cash_total,
+                'gcash_total' => (float) $savedInventory->gcash_total,
+                'total_verified' => (float) $savedInventory->total_verified,
+                'difference' => (float) $savedInventory->difference,
+                'status' => (string) $savedInventory->status,
+                'cash_breakdown' => $savedInventory->cash_breakdown,
+                'gcash_details' => $savedInventory->gcash_details,
+                'payment_entries' => $savedInventory->payment_entries,
+                'user' => $savedInventory->user ? [
+                    'name' => (string) $savedInventory->user->name,
+                ] : null,
+                'staff_name' => $savedInventory->user?->name,
+            ],
         ]);
     }
 }

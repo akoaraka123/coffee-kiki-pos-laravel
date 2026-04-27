@@ -96,7 +96,12 @@
                                                     value="{{ $showEditModal ? old('name', $user->name) : $user->name }}"
                                                     required
                                                     class="mt-2 w-full rounded-xl border border-white/10 bg-[#111] px-4 py-3 text-white placeholder:text-white/30 focus:outline-none focus:ring-2 focus:ring-white/20"
+                                                    oninput="validateNameInput(this)"
                                                 />
+                                                @error('name')
+                                                    <p class="mt-1 text-xs text-rose-300">{{ $message }}</p>
+                                                @enderror
+                                                <p id="edit-name-error-{{ $user->id }}" class="mt-1 text-xs text-rose-300 hidden"></p>
                                             </div>
 
                                             <div class="sm:col-span-2">
@@ -108,7 +113,12 @@
                                                     value="{{ $showEditModal ? old('email', $user->email) : $user->email }}"
                                                     required
                                                     class="mt-2 w-full rounded-xl border border-white/10 bg-[#111] px-4 py-3 text-white placeholder:text-white/30 focus:outline-none focus:ring-2 focus:ring-white/20"
+                                                    oninput="validateEmailInput(this)"
                                                 />
+                                                @error('email')
+                                                    <p class="mt-1 text-xs text-rose-300">{{ $message }}</p>
+                                                @enderror
+                                                <p id="edit-email-error-{{ $user->id }}" class="mt-1 text-xs text-rose-300 hidden"></p>
                                             </div>
 
                                             <div class="sm:col-span-2">
@@ -124,12 +134,20 @@
 
                                             <div>
                                                 <label for="edit-password-{{ $user->id }}" class="text-xs text-white/60">New Password (optional)</label>
-                                                <input id="edit-password-{{ $user->id }}" name="password" type="password" autocomplete="new-password" class="mt-2 w-full rounded-xl border border-white/10 bg-[#111] px-4 py-3 text-white placeholder:text-white/30 focus:outline-none focus:ring-2 focus:ring-white/20" />
+                                                <input id="edit-password-{{ $user->id }}" name="password" type="password" autocomplete="new-password" class="mt-2 w-full rounded-xl border border-white/10 bg-[#111] px-4 py-3 text-white placeholder:text-white/30 focus:outline-none focus:ring-2 focus:ring-white/20" oninput="validatePasswordInput(this)" />
+                                                @error('password')
+                                                    <p class="mt-1 text-xs text-rose-300">{{ $message }}</p>
+                                                @enderror
+                                                <p id="edit-password-error-{{ $user->id }}" class="mt-1 text-xs text-rose-300 hidden"></p>
                                             </div>
 
                                             <div>
                                                 <label for="edit-password-confirmation-{{ $user->id }}" class="text-xs text-white/60">Confirm New Password</label>
-                                                <input id="edit-password-confirmation-{{ $user->id }}" name="password_confirmation" type="password" autocomplete="new-password" class="mt-2 w-full rounded-xl border border-white/10 bg-[#111] px-4 py-3 text-white placeholder:text-white/30 focus:outline-none focus:ring-2 focus:ring-white/20" />
+                                                <input id="edit-password-confirmation-{{ $user->id }}" name="password_confirmation" type="password" autocomplete="new-password" class="mt-2 w-full rounded-xl border border-white/10 bg-[#111] px-4 py-3 text-white placeholder:text-white/30 focus:outline-none focus:ring-2 focus:ring-white/20" oninput="validatePasswordConfirmation(this)" />
+                                                @error('password_confirmation')
+                                                    <p class="mt-1 text-xs text-rose-300">{{ $message }}</p>
+                                                @enderror
+                                                <p id="edit-password-confirmation-error-{{ $user->id }}" class="mt-1 text-xs text-rose-300 hidden"></p>
                                             </div>
                                         </div>
 
@@ -173,12 +191,20 @@
                 <div class="grid grid-cols-1 gap-4 sm:grid-cols-2">
                     <div class="sm:col-span-2">
                         <label for="name" class="text-xs text-white/60">Name</label>
-                        <input id="name" name="name" value="{{ old('name') }}" required class="mt-2 w-full rounded-xl border border-white/10 bg-[#111] px-4 py-3 text-white placeholder:text-white/30 focus:outline-none focus:ring-2 focus:ring-white/20" />
+                        <input id="name" name="name" value="{{ old('name') }}" required class="mt-2 w-full rounded-xl border border-white/10 bg-[#111] px-4 py-3 text-white placeholder:text-white/30 focus:outline-none focus:ring-2 focus:ring-white/20" oninput="validateNameInput(this)" />
+                        @error('name')
+                            <p class="mt-1 text-xs text-rose-300">{{ $message }}</p>
+                        @enderror
+                        <p id="create-name-error" class="mt-1 text-xs text-rose-300 hidden"></p>
                     </div>
 
                     <div class="sm:col-span-2">
                         <label for="email" class="text-xs text-white/60">Email</label>
-                        <input id="email" name="email" type="email" value="{{ old('email') }}" required class="mt-2 w-full rounded-xl border border-white/10 bg-[#111] px-4 py-3 text-white placeholder:text-white/30 focus:outline-none focus:ring-2 focus:ring-white/20" />
+                        <input id="email" name="email" type="email" value="{{ old('email') }}" required class="mt-2 w-full rounded-xl border border-white/10 bg-[#111] px-4 py-3 text-white placeholder:text-white/30 focus:outline-none focus:ring-2 focus:ring-white/20" oninput="validateEmailInput(this)" />
+                        @error('email')
+                            <p class="mt-1 text-xs text-rose-300">{{ $message }}</p>
+                        @enderror
+                        <p id="create-email-error" class="mt-1 text-xs text-rose-300 hidden"></p>
                     </div>
 
                     <div>
@@ -191,12 +217,20 @@
 
                     <div>
                         <label for="password" class="text-xs text-white/60">Password</label>
-                        <input id="password" name="password" type="password" required autocomplete="new-password" class="mt-2 w-full rounded-xl border border-white/10 bg-[#111] px-4 py-3 text-white placeholder:text-white/30 focus:outline-none focus:ring-2 focus:ring-white/20" />
+                        <input id="password" name="password" type="password" required autocomplete="new-password" class="mt-2 w-full rounded-xl border border-white/10 bg-[#111] px-4 py-3 text-white placeholder:text-white/30 focus:outline-none focus:ring-2 focus:ring-white/20" oninput="validatePasswordInput(this)" />
+                        @error('password')
+                            <p class="mt-1 text-xs text-rose-300">{{ $message }}</p>
+                        @enderror
+                        <p id="create-password-error" class="mt-1 text-xs text-rose-300 hidden"></p>
                     </div>
 
                     <div class="sm:col-span-2">
                         <label for="password_confirmation" class="text-xs text-white/60">Confirm Password</label>
-                        <input id="password_confirmation" name="password_confirmation" type="password" required autocomplete="new-password" class="mt-2 w-full rounded-xl border border-white/10 bg-[#111] px-4 py-3 text-white placeholder:text-white/30 focus:outline-none focus:ring-2 focus:ring-white/20" />
+                        <input id="password_confirmation" name="password_confirmation" type="password" required autocomplete="new-password" class="mt-2 w-full rounded-xl border border-white/10 bg-[#111] px-4 py-3 text-white placeholder:text-white/30 focus:outline-none focus:ring-2 focus:ring-white/20" oninput="validatePasswordConfirmation(this)" />
+                        @error('password_confirmation')
+                            <p class="mt-1 text-xs text-rose-300">{{ $message }}</p>
+                        @enderror
+                        <p id="create-password-confirmation-error" class="mt-1 text-xs text-rose-300 hidden"></p>
                     </div>
                 </div>
 
@@ -212,3 +246,171 @@
         </div>
     </x-modal>
 @endsection
+
+<script>
+    const nameRegex = /^[A-Za-zÑñ .'-]+$/;
+    const passwordRegex = /^(?=.*[a-z])(?=.*[A-Z])(?=.*\d)[A-Za-z\d!@#$%^&*_.?-]+$/;
+
+    function validateNameInput(input) {
+        const errorElement = input.id.includes('edit-name') 
+            ? document.getElementById(input.id.replace('edit-name', 'edit-name-error'))
+            : document.getElementById('create-name-error');
+        const value = input.value.trim();
+        
+        if (value.length === 0) {
+            if (errorElement) {
+                errorElement.textContent = '';
+                errorElement.classList.add('hidden');
+            }
+            input.classList.remove('border-rose-500');
+            return true;
+        }
+        
+        if (value.length < 2) {
+            if (errorElement) {
+                errorElement.textContent = 'Name must be at least 2 characters.';
+                errorElement.classList.remove('hidden');
+            }
+            input.classList.add('border-rose-500');
+            return false;
+        }
+        
+        if (!nameRegex.test(value)) {
+            if (errorElement) {
+                errorElement.textContent = 'Name may only contain letters, spaces, Ñ, ñ, hyphen, apostrophe, and period.';
+                errorElement.classList.remove('hidden');
+            }
+            input.classList.add('border-rose-500');
+            return false;
+        }
+        
+        if (errorElement) {
+            errorElement.textContent = '';
+            errorElement.classList.add('hidden');
+        }
+        input.classList.remove('border-rose-500');
+        return true;
+    }
+
+    function validateEmailInput(input) {
+        const errorElement = input.id.includes('edit-email')
+            ? document.getElementById(input.id.replace('edit-email', 'edit-email-error'))
+            : document.getElementById('create-email-error');
+        const value = input.value.trim().toLowerCase();
+        
+        if (value.length === 0) {
+            if (errorElement) {
+                errorElement.textContent = '';
+                errorElement.classList.add('hidden');
+            }
+            input.classList.remove('border-rose-500');
+            return true;
+        }
+        
+        const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+        if (!emailRegex.test(value)) {
+            if (errorElement) {
+                errorElement.textContent = 'Please enter a valid email address.';
+                errorElement.classList.remove('hidden');
+            }
+            input.classList.add('border-rose-500');
+            return false;
+        }
+        
+        if (errorElement) {
+            errorElement.textContent = '';
+            errorElement.classList.add('hidden');
+        }
+        input.classList.remove('border-rose-500');
+        return true;
+    }
+
+    function validatePasswordInput(input) {
+        const errorElement = input.id.includes('edit-password')
+            ? document.getElementById(input.id.replace('edit-password', 'edit-password-error'))
+            : document.getElementById('create-password-error');
+        const value = input.value;
+        
+        if (value.length === 0) {
+            if (errorElement) {
+                errorElement.textContent = '';
+                errorElement.classList.add('hidden');
+            }
+            input.classList.remove('border-rose-500');
+            return true;
+        }
+        
+        if (value.length < 8) {
+            if (errorElement) {
+                errorElement.textContent = 'Password must be at least 8 characters.';
+                errorElement.classList.remove('hidden');
+            }
+            input.classList.add('border-rose-500');
+            return false;
+        }
+        
+        if (value.length > 64) {
+            if (errorElement) {
+                errorElement.textContent = 'Password must not exceed 64 characters.';
+                errorElement.classList.remove('hidden');
+            }
+            input.classList.add('border-rose-500');
+            return false;
+        }
+        
+        if (!passwordRegex.test(value)) {
+            if (errorElement) {
+                errorElement.textContent = 'Password must include uppercase, lowercase, and number. Only common symbols are allowed.';
+                errorElement.classList.remove('hidden');
+            }
+            input.classList.add('border-rose-500');
+            return false;
+        }
+        
+        if (errorElement) {
+            errorElement.textContent = '';
+            errorElement.classList.add('hidden');
+        }
+        input.classList.remove('border-rose-500');
+        return true;
+    }
+
+    function validatePasswordConfirmation(input) {
+        const errorElement = input.id.includes('edit-password-confirmation')
+            ? document.getElementById(input.id.replace('edit-password-confirmation', 'edit-password-confirmation-error'))
+            : document.getElementById('create-password-confirmation-error');
+        const passwordInput = input.id.includes('edit-password-confirmation')
+            ? document.getElementById(input.id.replace('-confirmation', ''))
+            : document.getElementById('password');
+        
+        if (!passwordInput) return true;
+        
+        const password = passwordInput.value;
+        const confirmation = input.value;
+        
+        if (confirmation.length === 0) {
+            if (errorElement) {
+                errorElement.textContent = '';
+                errorElement.classList.add('hidden');
+            }
+            input.classList.remove('border-rose-500');
+            return true;
+        }
+        
+        if (password !== confirmation) {
+            if (errorElement) {
+                errorElement.textContent = 'Password confirmation does not match.';
+                errorElement.classList.remove('hidden');
+            }
+            input.classList.add('border-rose-500');
+            return false;
+        }
+        
+        if (errorElement) {
+            errorElement.textContent = '';
+            errorElement.classList.add('hidden');
+        }
+        input.classList.remove('border-rose-500');
+        return true;
+    }
+</script>

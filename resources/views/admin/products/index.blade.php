@@ -71,9 +71,9 @@
 
                     <div class="flex items-start justify-center pt-2">
                         <img
-                            :src="item.product.image ? ((window.__assetBaseUrl || '/') + item.product.image) : ((window.__assetBaseUrl || '/') + 'images/coffee-doodle.png')"
+                            :src="productImageSrc(item.product)"
                             :alt="item.product.name"
-                            x-on:error="if (!$el.dataset.fallbackTried) { $el.dataset.fallbackTried = '1'; $el.src = (window.__assetBaseUrl || '/') + 'images/coffee-doodle.png'; }"
+                            x-on:error="if (!$el.dataset.fallbackTried) { $el.dataset.fallbackTried = '1'; $el.src = '/images/coffee-doodle.png'; }"
                             class="max-h-60 w-auto object-contain drop-shadow-xl"
                             loading="lazy"
                             style="image-rendering: -webkit-optimize-contrast;"
@@ -83,8 +83,23 @@
                     <div class="mt-3 space-y-2">
                         <template x-for="size in item.sizes" :key="String(size.size || '') + '-' + String(size.price)">
                             <div class="w-full flex items-center justify-between px-4 py-3 rounded-xl bg-black/40 border border-white/10 text-white text-lg font-medium">
-                                <span x-text="size.size || 'Regular'"></span>
-                                <span>₱<span x-text="formatPrice(size.price)"></span></span>
+                                <div class="flex-1">
+                                    <div class="flex items-center justify-between">
+                                        <span x-text="size.size || 'Regular'"></span>
+                                        <span>₱<span x-text="formatPrice(size.price)"></span></span>
+                                    </div>
+                                    <div class="flex items-center justify-between mt-2">
+                                        <span class="text-xs text-white/60">Stock: <span x-text="size.stock_quantity || 0"></span></span>
+                                        <span class="text-[10px] font-semibold px-2 py-0.5 rounded-full"
+                                            :class="{
+                                                'bg-emerald-500/20 text-emerald-300 border border-emerald-500/30': (size.stock_quantity || 0) > (size.low_stock_threshold || 10),
+                                                'bg-amber-500/20 text-amber-300 border border-amber-500/30': (size.stock_quantity || 0) > 0 && (size.stock_quantity || 0) <= (size.low_stock_threshold || 10),
+                                                'bg-rose-500/20 text-rose-300 border border-rose-500/30': (size.stock_quantity || 0) === 0
+                                            }"
+                                            x-text="(size.stock_quantity || 0) === 0 ? 'Out of Stock' : ((size.stock_quantity || 0) <= (size.low_stock_threshold || 10) ? 'Low Stock' : 'In Stock')"
+                                        ></span>
+                                    </div>
+                                </div>
                             </div>
                         </template>
                     </div>

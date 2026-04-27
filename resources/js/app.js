@@ -191,9 +191,22 @@ window.posOrder = function posOrder(initialLayout) {
                 .replace(/(^-|-$)/g, '');
         },
         productImageSrc(product) {
-            const image = product?.image;
-            if (image) return (window.__assetBaseUrl || '/') + image;
-            return (window.__assetBaseUrl || '/') + 'images/coffee-doodle.png';
+            const fallbackImage = '/images/coffee-doodle.png';
+
+            if (!product || !product.image) return fallbackImage;
+
+            const image = product.image;
+
+            if (image.startsWith('http://') || image.startsWith('https://')) {
+                return image;
+            }
+
+            if (image.startsWith('/')) {
+                return image;
+            }
+
+            // Use '/' directly since images are in public/products/ not in storage
+            return '/' + image.replace(/^\//, '');
         },
         openProductModal(product) {
             if (!this.ensureClockedIn()) return;
@@ -929,6 +942,8 @@ Alpine.data('adminOrders', () => ({
     expandedOrderId: null,
     imagePreviewOpen: false,
     imagePreviewUrl: '',
+    savedInventoryModalOpen: false,
+    selectedSavedInventory: null,
     deletingToday: false,
     deletingOrderId: null,
     deletingDailySalesId: null,
@@ -948,6 +963,8 @@ Alpine.data('adminOrders', () => ({
         this.dailyError = '';
         this.dailyPayload = null;
         this.expandedOrderId = null;
+        this.savedInventoryModalOpen = false;
+        this.selectedSavedInventory = null;
     },
 
     toggleOrder(orderId) {
@@ -966,6 +983,31 @@ Alpine.data('adminOrders', () => ({
     closeImagePreview() {
         this.imagePreviewOpen = false;
         this.imagePreviewUrl = '';
+    },
+
+    openSavedInventoryDetails(record) {
+        if (!record) return;
+        this.selectedSavedInventory = record;
+        this.savedInventoryModalOpen = true;
+    },
+
+    closeSavedInventoryDetails() {
+        this.savedInventoryModalOpen = false;
+        this.selectedSavedInventory = null;
+    },
+
+    formatDisplayDate(value) {
+        if (!value) return '';
+        const d = new Date(value);
+        if (Number.isNaN(d.getTime())) return String(value);
+        return d.toLocaleDateString(undefined, { year: 'numeric', month: 'long', day: 'numeric' });
+    },
+
+    formatEntryTime(value) {
+        if (!value) return '';
+        const d = new Date(value);
+        if (Number.isNaN(d.getTime())) return String(value);
+        return d.toLocaleTimeString(undefined, { hour: '2-digit', minute: '2-digit' });
     },
 
     async deleteOrder(orderId) {
@@ -1226,10 +1268,20 @@ Alpine.data('adminProductsIndex', () => ({
     },
 
     editImagePreviewSrc() {
-        if (this.editImagePreviewUrl) return this.editImagePreviewUrl;
-        if (this.editForm.image) return (window.__assetBaseUrl || '/') + this.editForm.image;
-        return (window.__assetBaseUrl || '/') + 'images/coffee-doodle.png';
-    },
+            if (this.editImagePreviewUrl) return this.editImagePreviewUrl;
+            if (this.editForm.image) {
+                const image = this.editForm.image;
+                if (image.startsWith('http://') || image.startsWith('https://')) {
+                    return image;
+                }
+                if (image.startsWith('/')) {
+                    return image;
+                }
+                // Use '/' directly since images are in public/products/ not in storage
+                return '/' + image.replace(/^\//, '');
+            }
+            return '/images/coffee-doodle.png';
+        },
 
     onImageChange(e) {
         const file = e?.target?.files?.[0];
@@ -1445,9 +1497,9 @@ Alpine.data('adminProductsIndex', () => ({
     },
 
     addImagePreviewSrc() {
-        if (this.addImagePreviewUrl) return this.addImagePreviewUrl;
-        return (window.__assetBaseUrl || '/') + 'images/coffee-doodle.png';
-    },
+            if (this.addImagePreviewUrl) return this.addImagePreviewUrl;
+            return '/images/coffee-doodle.png';
+        },
 
     onAddImageChange(e) {
         const file = e?.target?.files?.[0];
@@ -1456,6 +1508,25 @@ Alpine.data('adminProductsIndex', () => ({
             try { URL.revokeObjectURL(this.addImagePreviewUrl); } catch (err) {}
         }
         this.addImagePreviewUrl = file ? URL.createObjectURL(file) : '';
+    },
+
+    productImageSrc(product) {
+        const fallbackImage = '/images/coffee-doodle.png';
+
+        if (!product || !product.image) return fallbackImage;
+
+        const image = product.image;
+
+        if (image.startsWith('http://') || image.startsWith('https://')) {
+            return image;
+        }
+
+        if (image.startsWith('/')) {
+            return image;
+        }
+
+        // Use '/' directly since images are in public/products/ not in storage
+        return '/' + image.replace(/^\//, '');
     },
 
     addAddSizeRow() {
@@ -1755,6 +1826,19 @@ Alpine.data('moneyInventory', (payload) => {
         editEntry: null,
         editPaymentBreakdown: {},
         editSaving: false,
+
+        // Modal state used by Blade templates
+        viewEntryModalOpen: false,
+        selectedPaymentEntry: null,
+        // Backward-compatible alias currently used in template
+        viewEntry: null,
+
+        savedInventoryModalOpen: false,
+        selectedSavedInventory: null,
+        // Backward-compatible alias currently used in template
+        savedInventory: null,
+        savedInventoryViewUrlTemplate: payload?.savedInventoryViewUrlTemplate || '',
+        savedInventories: Array.isArray(payload?.savedInventories) ? payload.savedInventories : [],
 
         gcashOrders: Array.isArray(payload?.gcashOrders) ? payload.gcashOrders : [],
         confirmedOrderIds: Array.isArray(payload?.confirmedOrderIds) ? payload.confirmedOrderIds : [],
@@ -2390,6 +2474,100 @@ Alpine.data('moneyInventory', (payload) => {
             this.editPaymentBreakdown = base;
             this.editEntryOpen = true;
             this.showToast(`Today's Total Sales: ${this.formatCurrency(this.todaysTotalSales)}`);
+        },
+
+        openPaymentEntryModal(entry) {
+            if (!entry) return;
+            this.selectedPaymentEntry = entry;
+            this.viewEntry = entry;
+            this.viewEntryModalOpen = true;
+        },
+
+        closePaymentEntryModal() {
+            this.viewEntryModalOpen = false;
+            this.selectedPaymentEntry = null;
+            this.viewEntry = null;
+        },
+
+        // Keep existing template bindings working
+        openViewEntryModal(entry) {
+            this.openPaymentEntryModal(entry);
+        },
+
+        closeViewEntryModal() {
+            this.closePaymentEntryModal();
+        },
+
+        buildSavedInventoryUrl(savedId) {
+            if (!this.savedInventoryViewUrlTemplate) return '';
+            return String(this.savedInventoryViewUrlTemplate).replace('__ID__', encodeURIComponent(String(savedId)));
+        },
+
+        normalizeSavedInventoryRecord(saved) {
+            if (!saved || typeof saved !== 'object') return null;
+            return {
+                id: Number(saved.id || 0),
+                date: saved.date || '',
+                saved_at: saved.saved_at || null,
+                total_sales: Number(saved.total_sales || 0),
+                cash_total: Number(saved.cash_total || 0),
+                gcash_total: Number(saved.gcash_total || 0),
+                total_verified: Number(saved.total_verified || 0),
+                difference: Number(saved.difference || 0),
+                status: String(saved.status || 'saved'),
+                cash_breakdown: saved.cash_breakdown || {},
+                gcash_details: Array.isArray(saved.gcash_details) ? saved.gcash_details : [],
+                payment_entries: Array.isArray(saved.payment_entries) ? saved.payment_entries : [],
+                user: saved.user && typeof saved.user === 'object'
+                    ? { name: String(saved.user.name || '').trim() }
+                    : null,
+            };
+        },
+
+        async openSavedInventoryModal(record) {
+            if (!record) return;
+            this.errorMessage = '';
+
+            const fallbackRecord = this.normalizeSavedInventoryRecord(record);
+            this.selectedSavedInventory = fallbackRecord;
+            this.savedInventory = fallbackRecord;
+            this.savedInventoryModalOpen = true;
+
+            const savedId = record?.id;
+            const url = this.buildSavedInventoryUrl(savedId);
+            if (!savedId || !url) return;
+
+            try {
+                const res = await fetch(url, {
+                    method: 'GET',
+                    headers: {
+                        'Accept': 'application/json',
+                        'X-Requested-With': 'XMLHttpRequest',
+                    },
+                });
+                const data = await res.json().catch(() => ({}));
+                if (!res.ok) {
+                    this.errorMessage = data?.message || 'Failed to load saved inventory details.';
+                    return;
+                }
+
+                const fullSaved = this.normalizeSavedInventoryRecord(data?.saved_inventory);
+                if (!fullSaved) return;
+
+                this.selectedSavedInventory = fullSaved;
+                this.savedInventory = fullSaved;
+                this.savedInventories = (Array.isArray(this.savedInventories) ? this.savedInventories : []).map((row) =>
+                    String(row?.id) === String(fullSaved.id) ? fullSaved : row
+                );
+            } catch (e) {
+                this.errorMessage = 'Failed to load saved inventory details.';
+            }
+        },
+
+        closeSavedInventoryModal() {
+            this.savedInventoryModalOpen = false;
+            this.selectedSavedInventory = null;
+            this.savedInventory = null;
         },
 
         closeEditEntry() {

@@ -50,15 +50,45 @@ class AdminUserController extends Controller
     public function store(Request $request): RedirectResponse
     {
         $validated = $request->validate([
-            'name' => ['required', 'string', 'max:255'],
-            'email' => ['required', 'string', 'lowercase', 'email', 'max:255', 'unique:' . User::class],
-            'password' => ['required', 'confirmed', Rules\Password::defaults()],
+            'name' => [
+                'required',
+                'string',
+                'min:2',
+                'max:100',
+                'regex:/^[A-Za-zÑñ .\'-]+$/',
+            ],
+            'email' => [
+                'required',
+                'string',
+                'email',
+                'max:255',
+                'unique:' . User::class,
+            ],
+            'password' => [
+                'required',
+                'string',
+                'min:8',
+                'max:64',
+                'confirmed',
+                'regex:/^(?=.*[a-z])(?=.*[A-Z])(?=.*\d)[A-Za-z\d!@#$%^&*_.?-]+$/',
+            ],
             'role' => ['nullable', 'string', 'in:admin,staff'],
+        ], [
+            'name.regex' => 'Name may only contain letters, spaces, Ñ, ñ, hyphen, apostrophe, and period.',
+            'name.min' => 'Name must be at least 2 characters.',
+            'name.max' => 'Name must not exceed 100 characters.',
+            'email.email' => 'Please enter a valid email address.',
+            'email.max' => 'Email must not exceed 255 characters.',
+            'password.required' => 'Password is required.',
+            'password.min' => 'Password must be at least 8 characters.',
+            'password.max' => 'Password must not exceed 64 characters.',
+            'password.confirmed' => 'Password confirmation does not match.',
+            'password.regex' => 'Password must be 8-64 characters and include uppercase, lowercase, and number. Only common symbols are allowed.',
         ]);
 
         User::create([
-            'name' => $validated['name'],
-            'email' => $validated['email'],
+            'name' => trim($validated['name']),
+            'email' => strtolower(trim($validated['email'])),
             'password' => Hash::make($validated['password']),
             'role' => $validated['role'] ?? 'staff',
         ]);
@@ -77,10 +107,39 @@ class AdminUserController extends Controller
     public function update(Request $request, User $user): RedirectResponse
     {
         $validator = Validator::make($request->all(), [
-            'name' => ['required', 'string', 'max:255'],
-            'email' => ['required', 'string', 'lowercase', 'email', 'max:255', 'unique:' . User::class . ',email,' . $user->id],
+            'name' => [
+                'required',
+                'string',
+                'min:2',
+                'max:100',
+                'regex:/^[A-Za-zÑñ .\'-]+$/',
+            ],
+            'email' => [
+                'required',
+                'string',
+                'email',
+                'max:255',
+                'unique:' . User::class . ',email,' . $user->id,
+            ],
             'role' => ['required', 'string', 'in:admin,staff'],
-            'password' => ['nullable', 'confirmed', Rules\Password::defaults()],
+            'password' => [
+                'nullable',
+                'string',
+                'min:8',
+                'max:64',
+                'confirmed',
+                'regex:/^(?=.*[a-z])(?=.*[A-Z])(?=.*\d)[A-Za-z\d!@#$%^&*_.?-]+$/',
+            ],
+        ], [
+            'name.regex' => 'Name may only contain letters, spaces, Ñ, ñ, hyphen, apostrophe, and period.',
+            'name.min' => 'Name must be at least 2 characters.',
+            'name.max' => 'Name must not exceed 100 characters.',
+            'email.email' => 'Please enter a valid email address.',
+            'email.max' => 'Email must not exceed 255 characters.',
+            'password.min' => 'Password must be at least 8 characters.',
+            'password.max' => 'Password must not exceed 64 characters.',
+            'password.confirmed' => 'Password confirmation does not match.',
+            'password.regex' => 'Password must be 8-64 characters and include uppercase, lowercase, and number. Only common symbols are allowed.',
         ]);
 
         if ($validator->fails()) {
@@ -100,8 +159,8 @@ class AdminUserController extends Controller
                 ->withInput();
         }
 
-        $user->name = $validated['name'];
-        $user->email = $validated['email'];
+        $user->name = trim($validated['name']);
+        $user->email = strtolower(trim($validated['email']));
         $user->role = $validated['role'];
 
         if (isset($validated['password']) && is_string($validated['password']) && $validated['password'] !== '') {

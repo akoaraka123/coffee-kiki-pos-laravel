@@ -27,7 +27,6 @@
     data-products='@json($products)'
     data-inventory='@json($inventoryMap)'
     data-initial-layout="{{ auth()->user()->pos_layout === 'left' ? 'left' : 'right' }}"
-    data-clocked-in="{{ auth()->user()->clocked_in ? '1' : '0' }}"
 @endsection
 
 @section('content')

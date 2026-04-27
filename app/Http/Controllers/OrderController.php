@@ -256,19 +256,30 @@ class OrderController extends Controller
             abort(403, 'Staff is currently clocked out. You cannot add or checkout orders.');
         }
 
-        // Check for active sales session
+        // Find or create active sales session
         $activeSalesSession = \App\Models\Shift::where('user_id', $user->id)
             ->where('status', 'ACTIVE')
+            ->latest('started_at')
             ->first();
 
         if (! $activeSalesSession) {
-            if ($request->expectsJson()) {
-                return response()->json([
-                    'message' => 'No active sales session found.',
-                ], 403);
-            }
+            try {
+                $activeSalesSession = \App\Models\Shift::create([
+                    'user_id' => $user->id,
+                    'shift_id' => (string) Str::uuid(),
+                    'business_date' => now()->toDateString(),
+                    'started_at' => now(),
+                    'status' => 'ACTIVE',
+                ]);
+            } catch (\Throwable $e) {
+                if ($request->expectsJson()) {
+                    return response()->json([
+                        'message' => 'Unable to create active sales session.',
+                    ], 422);
+                }
 
-            abort(403, 'No active sales session found.');
+                abort(422, 'Unable to create active sales session.');
+            }
         }
 
         $validated = $request->validate([
@@ -433,16 +444,11 @@ class OrderController extends Controller
 
         $order = null;
 
-        DB::transaction(function () use ($request, $validated, $total, $itemsToInsert, $paymentType, $cashReceived, $changeAmount, &$order): void {
+        DB::transaction(function () use ($request, $validated, $total, $itemsToInsert, $paymentType, $cashReceived, $changeAmount, &$order, $activeSalesSession): void {
             $gcashProofImagePath = null;
             if ($paymentType === 'gcash' && !empty($validated['gcash_proof_image'])) {
                 $gcashProofImagePath = $this->saveGcashProofImage($validated['gcash_proof_image']);
             }
-
-            // Get active shift for the user
-            $activeShift = \App\Models\Shift::where('user_id', $request->user()->id)
-                ->where('status', 'ACTIVE')
-                ->first();
 
             $order = Order::create([
                 'order_number' => $this->generateOrderNumber(),

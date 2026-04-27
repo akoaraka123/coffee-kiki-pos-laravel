@@ -93,6 +93,7 @@ Route::prefix('staff')
         Route::delete('/money-inventory/payment-entry/{entry}', [StaffMoneyInventoryController::class, 'deletePaymentEntry'])->name('money-inventory.payment-entries.destroy');
         Route::post('/money-inventory/reset-todays-sales', [StaffMoneyInventoryController::class, 'resetTodaysSales'])->name('money-inventory.reset-todays-sales');
         Route::post('/money-inventory/undo-reconcile', [StaffMoneyInventoryController::class, 'undoTodaysSalesReconciliation'])->name('money-inventory.undo-reconcile');
+        Route::get('/money-inventory/saved/{savedInventory}', [StaffMoneyInventoryController::class, 'showSavedInventory'])->name('money-inventory.saved.show');
 
         Route::get('/inventory', [StaffInventoryController::class, 'index'])->name('inventory.index');
         Route::post('/inventory/delete-stock', [StaffInventoryController::class, 'deleteStock'])->name('inventory.delete-stock');
