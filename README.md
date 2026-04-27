@@ -1,58 +1,129 @@
-<p align="center"><a href="https://laravel.com" target="_blank"><img src="https://raw.githubusercontent.com/laravel/art/master/logo-lockup/5%20SVG/2%20CMYK/1%20Full%20Color/laravel-logolockup-cmyk-red.svg" width="400" alt="Laravel Logo"></a></p>
+# Khopi-Kiki POS System
 
-<p align="center">
-<a href="https://github.com/laravel/framework/actions"><img src="https://github.com/laravel/framework/workflows/tests/badge.svg" alt="Build Status"></a>
-<a href="https://packagist.org/packages/laravel/framework"><img src="https://img.shields.io/packagist/dt/laravel/framework" alt="Total Downloads"></a>
-<a href="https://packagist.org/packages/laravel/framework"><img src="https://img.shields.io/packagist/v/laravel/framework" alt="Latest Stable Version"></a>
-<a href="https://packagist.org/packages/laravel/framework"><img src="https://img.shields.io/packagist/l/laravel/framework" alt="License"></a>
-</p>
+A Point of Sale (POS) system for coffee shops, built with Laravel.
 
-## About Laravel
+## Setup Instructions
 
-Laravel is a web application framework with expressive, elegant syntax. We believe development must be an enjoyable and creative experience to be truly fulfilling. Laravel takes the pain out of development by easing common tasks used in many web projects, such as:
+### Initial Setup
 
-- [Simple, fast routing engine](https://laravel.com/docs/routing).
-- [Powerful dependency injection container](https://laravel.com/docs/container).
-- Multiple back-ends for [session](https://laravel.com/docs/session) and [cache](https://laravel.com/docs/cache) storage.
-- Expressive, intuitive [database ORM](https://laravel.com/docs/eloquent).
-- Database agnostic [schema migrations](https://laravel.com/docs/migrations).
-- [Robust background job processing](https://laravel.com/docs/queues).
-- [Real-time event broadcasting](https://laravel.com/docs/broadcasting).
+1. Clone the repository:
+```bash
+git clone <repository-url>
+cd khopi-kiki
+```
 
-Laravel is accessible, powerful, and provides tools required for large, robust applications.
+2. Install dependencies:
+```bash
+composer install
+npm install
+```
 
-## Learning Laravel
+3. Copy environment file:
+```bash
+cp .env.example .env
+```
 
-Laravel has the most extensive and thorough [documentation](https://laravel.com/docs) and video tutorial library of all modern web application frameworks, making it a breeze to get started with the framework. You can also check out [Laravel Learn](https://laravel.com/learn), where you will be guided through building a modern Laravel application.
+4. Generate application key:
+```bash
+php artisan key:generate
+```
 
-If you don't feel like reading, [Laracasts](https://laracasts.com) can help. Laracasts contains thousands of video tutorials on a range of topics including Laravel, modern PHP, unit testing, and JavaScript. Boost your skills by digging into our comprehensive video library.
+5. Configure database in `.env`:
+```
+DB_CONNECTION=mysql
+DB_HOST=127.0.0.1
+DB_PORT=3306
+DB_DATABASE=khopi_kiki
+DB_USERNAME=your_username
+DB_PASSWORD=your_password
+```
 
-## Laravel Sponsors
+6. Run migrations:
+```bash
+php artisan migrate
+```
 
-We would like to extend our thanks to the following sponsors for funding Laravel development. If you are interested in becoming a sponsor, please visit the [Laravel Partners program](https://partners.laravel.com).
+7. Build assets:
+```bash
+npm run build
+```
 
-### Premium Partners
+8. Start development server:
+```bash
+php artisan serve
+```
 
-- **[Vehikl](https://vehikl.com)**
-- **[Tighten Co.](https://tighten.co)**
-- **[Kirschbaum Development Group](https://kirschbaumdevelopment.com)**
-- **[64 Robots](https://64robots.com)**
-- **[Curotec](https://www.curotec.com/services/technologies/laravel)**
-- **[DevSquad](https://devsquad.com/hire-laravel-developers)**
-- **[Redberry](https://redberry.international/laravel-development)**
-- **[Active Logic](https://activelogic.com)**
+### Cloning to Another Computer
 
-## Contributing
+When cloning this project to another computer, follow these steps:
 
-Thank you for considering contributing to the Laravel framework! The contribution guide can be found in the [Laravel documentation](https://laravel.com/docs/contributions).
+1. **Clone the repository:**
+```bash
+git clone <repository-url>
+cd khopi-kiki
+```
 
-## Code of Conduct
+2. **Install dependencies:**
+```bash
+composer install
+npm install
+```
 
-In order to ensure that the Laravel community is welcoming to all, please review and abide by the [Code of Conduct](https://laravel.com/docs/contributions#code-of-conduct).
+3. **Copy environment file:**
+```bash
+cp .env.example .env
+```
 
-## Security Vulnerabilities
+4. **Configure database in `.env`:**
+- Set `DB_DATABASE`, `DB_USERNAME`, and `DB_PASSWORD` to match your MySQL database
+- Set `APP_URL` to match your local URL (e.g., `http://localhost:8000`)
 
-If you discover a security vulnerability within Laravel, please send an e-mail to Taylor Otwell via [taylor@laravel.com](mailto:taylor@laravel.com). All security vulnerabilities will be promptly addressed.
+5. **Import the MySQL database:**
+- Import your existing database backup (SQL file) using phpMyAdmin or command line
+- **Important:** Product images are stored in the file system, not in the database
+
+6. **Copy product images:**
+- Product images are stored in `public/products/` directory
+- These images are tracked by Git and should be included when cloning
+- If images are missing after cloning, manually copy the `public/products/` folder from the original computer
+
+7. **Generate application key:**
+```bash
+php artisan key:generate
+```
+
+8. **Clear caches:**
+```bash
+php artisan config:clear
+php artisan cache:clear
+php artisan view:clear
+```
+
+9. **Run storage link (only if using storage for images):**
+```bash
+php artisan storage:link
+```
+
+10. **Build assets:**
+```bash
+npm run build
+```
+
+11. **Start development server:**
+```bash
+php artisan serve
+```
+
+### Important Notes
+
+- **Do NOT run `php artisan migrate` after importing a complete database** - this can cause conflicts. Only run migrations if new tables need to be created.
+- **Product images** are stored in `public/products/` and are tracked by Git. They are not included in MySQL exports.
+- If `public/products/` is missing, product images will not display even though the database contains the image paths.
+- The storage link (`php artisan storage:link`) is only needed if you're using Laravel's storage filesystem for images. Current setup uses `public/products/` directly.
+
+### Default Credentials
+
+After initial setup, you'll need to create an admin account via the database or registration (if available).
 
 ## License
 

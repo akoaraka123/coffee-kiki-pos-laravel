@@ -135,7 +135,7 @@
                                     <td class="px-4 py-3">
                                         <div class="flex items-center gap-3">
                                             @if($inventory->product && $inventory->product->image)
-                                                <img src="{{ asset('storage/' . $inventory->product->image) }}" alt="{{ $inventory->product_name }}" class="h-10 w-10 rounded-lg object-cover" onerror="this.src='{{ asset('images/coffee-doodle.png') }}'">
+                                                <img src="{{ $inventory->product->image ? asset($inventory->product->image) : asset('images/coffee-doodle.png') }}" alt="{{ $inventory->product_name }}" class="h-10 w-10 rounded-lg object-cover" onerror="this.src='{{ asset('images/coffee-doodle.png') }}'">
                                             @else
                                                 <div class="h-10 w-10 rounded-lg bg-white/10 flex items-center justify-center">
                                                     <span class="text-lg">☕</span>
