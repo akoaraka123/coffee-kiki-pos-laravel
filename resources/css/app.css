@@ -3,3 +3,14 @@
 @tailwind utilities;
 
 [x-cloak] { display: none !important; }
+
+/* Inventory category filter only: native select dropdown on Windows/Chrome otherwise
+   renders a light list while option text stays light → invisible choices. */
+select.inventory-category-filter {
+    color-scheme: dark;
+}
+
+select.inventory-category-filter option {
+    background-color: #18181b;
+    color: #fafafa;
+}

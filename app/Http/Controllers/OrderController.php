@@ -246,16 +246,6 @@ class OrderController extends Controller
             abort(403);
         }
 
-        if ($user && method_exists($user, 'isStaff') && $user->isStaff() && ! $user->clocked_in) {
-            if ($request->expectsJson()) {
-                return response()->json([
-                    'message' => 'Staff is currently clocked out. You cannot add or checkout orders.',
-                ], 403);
-            }
-
-            abort(403, 'Staff is currently clocked out. You cannot add or checkout orders.');
-        }
-
         // Find or create active sales session
         $activeSalesSession = \App\Models\Shift::where('user_id', $user->id)
             ->where('status', 'ACTIVE')

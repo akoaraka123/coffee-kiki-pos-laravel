@@ -11,7 +11,6 @@ window.posOrder = function posOrder(initialLayout) {
         sidebarCollapsed: false,
         hoverOpened: false,
         layoutPosition: (initialLayout === 'left') ? 'left' : 'right',
-        clockedIn: true,
         activeTab: 'milk_tea',
         searchQuery: '',
         focusedProductName: '',
@@ -42,6 +41,8 @@ window.posOrder = function posOrder(initialLayout) {
         gcashProofPreview: null,
         gcashModalError: '',
         gcashDetailsSaved: false,
+        printReceiptModalOpen: false,
+        pendingReceipt: null,
         normalizeCategory(value) {
             return String(value || '')
                 .trim()
@@ -131,11 +132,6 @@ window.posOrder = function posOrder(initialLayout) {
                 this.layoutPosition = fromAttr === 'left' ? 'left' : 'right';
             }
 
-            const clockedAttr = this.$el?.dataset?.clockedIn;
-            if (typeof clockedAttr === 'string') {
-                this.clockedIn = clockedAttr === '1' || clockedAttr.toLowerCase() === 'true';
-            }
-
             this.$watch('searchQuery', (value) => {
                 const q = (value || '').trim().toLowerCase();
                 if (!q) {
@@ -209,7 +205,6 @@ window.posOrder = function posOrder(initialLayout) {
             return '/' + image.replace(/^\//, '');
         },
         openProductModal(product) {
-            if (!this.ensureClockedIn()) return;
             this.modalProduct = product || null;
             this.productModalOpen = true;
         },
@@ -266,7 +261,6 @@ window.posOrder = function posOrder(initialLayout) {
             return Object.values(grouped);
         },
         add(name, sizeInfo) {
-            if (!this.ensureClockedIn()) return;
             if (!sizeInfo) return;
 
             const sizeLabel = (typeof sizeInfo.size === 'string' && sizeInfo.size.trim() !== '')
@@ -312,7 +306,6 @@ window.posOrder = function posOrder(initialLayout) {
             this.persistCart();
         },
         increment(productId, size) {
-            if (!this.ensureClockedIn()) return;
             const item = this.cart.find(i => i.product_id === productId && i.size === size);
             if (!item) return;
 
@@ -332,7 +325,6 @@ window.posOrder = function posOrder(initialLayout) {
             this.persistCart();
         },
         decrement(productId, size) {
-            if (!this.ensureClockedIn()) return;
             const item = this.cart.find(i => i.product_id === productId && i.size === size);
             if (!item) return;
             item.quantity -= 1;
@@ -342,7 +334,6 @@ window.posOrder = function posOrder(initialLayout) {
             this.persistCart();
         },
         clear() {
-            if (!this.ensureClockedIn()) return;
             this.cart = [];
             this.persistCart();
         },
@@ -362,11 +353,6 @@ window.posOrder = function posOrder(initialLayout) {
             this.__toastTimer = window.setTimeout(() => {
                 this.toastOpen = false;
             }, 2500);
-        },
-        ensureClockedIn() {
-            if (this.clockedIn) return true;
-            this.showToast('Staff is currently clocked out. You cannot add or checkout orders.');
-            return false;
         },
         showSuccess(message) {
             this.successMessage = message || '';
@@ -470,9 +456,11 @@ window.posOrder = function posOrder(initialLayout) {
             }
         },
         getStockStatus(productId) {
-            if (!productId || !this.inventory) return 'in_stock';
-            const inv = this.inventory[productId];
-            if (!inv || typeof inv !== 'object') return 'in_stock';
+            if (!productId || !this.inventory) return 'out_of_stock';
+            const inv =
+                this.inventory[productId] ?? this.inventory[String(productId)];
+            // Match getStockQuantity: missing map entry is shown as Stock 0, so status must not be "in stock".
+            if (!inv || typeof inv !== 'object') return 'out_of_stock';
             const stock = Number(inv.stock_quantity || 0);
             const threshold = Number(inv.low_stock_threshold || 10);
             if (stock === 0) return 'out_of_stock';
@@ -481,9 +469,216 @@ window.posOrder = function posOrder(initialLayout) {
         },
         getStockQuantity(productId) {
             if (!productId || !this.inventory) return '-';
-            const inv = this.inventory[productId];
+            const inv =
+                this.inventory[productId] ?? this.inventory[String(productId)];
             if (!inv || typeof inv !== 'object') return '-';
             return Number(inv.stock_quantity || 0);
+        },
+        printReceiptFromSnapshot(rec) {
+            if (!rec || !Array.isArray(rec.items) || rec.items.length === 0) {
+                return;
+            }
+            const escapeHtml = (s) =>
+                String(s ?? '')
+                    .replace(/&/g, '&amp;')
+                    .replace(/</g, '&lt;')
+                    .replace(/>/g, '&gt;')
+                    .replace(/"/g, '&quot;');
+
+            const base =
+                typeof window.__assetBaseUrl === 'string'
+                    ? window.__assetBaseUrl
+                    : '/';
+            const logoUrl = String(
+                this.$el?.dataset?.receiptLogoUrl || `${base}images/khopi-kiki-logo.png`,
+            ).trim();
+            const logoSrc = escapeHtml(logoUrl);
+
+            const cashier = String(
+                (rec.cashierName && String(rec.cashierName).trim()) ||
+                    (typeof window.__posCashierName === 'string' &&
+                    window.__posCashierName.trim()) ||
+                    (typeof document !== 'undefined' &&
+                        document
+                            .querySelector('[data-receipt-cashier-name]')
+                            ?.getAttribute('data-receipt-cashier-name')) ||
+                    this.$el?.getAttribute('data-receipt-cashier-name') ||
+                    this.$el?.dataset?.receiptCashierName ||
+                    '',
+            ).trim() || 'Staff';
+
+            const now = new Date();
+            const dateStr = now.toLocaleDateString('en-PH', {
+                year: 'numeric',
+                month: 'long',
+                day: 'numeric',
+            });
+            const timeStr = now.toLocaleTimeString('en-PH', {
+                hour: 'numeric',
+                minute: '2-digit',
+                hour12: true,
+            });
+
+            const receiptNo = escapeHtml(rec.orderNumber || '—');
+            const subtotal = Number(rec.total || 0);
+            const discount = 0;
+            const total = subtotal;
+
+            const rows = rec.items
+                .map((i) => {
+                    const qty = Number(i.quantity) || 0;
+                    const price = Number(i.price) || 0;
+                    const amount = qty * price;
+                    const size = String(i.size || '').trim();
+                    let itemCell = escapeHtml(i.name || '');
+                    if (size) {
+                        itemCell += ` <span class="dim">(${escapeHtml(size)})</span>`;
+                    }
+                    return (
+                        '<tr>' +
+                        `<td class="col-item">${itemCell}</td>` +
+                        `<td class="num">${escapeHtml(String(qty))}</td>` +
+                        `<td class="num">₱${price.toFixed(2)}</td>` +
+                        `<td class="num">₱${amount.toFixed(2)}</td>` +
+                        '</tr>'
+                    );
+                })
+                .join('');
+
+            let paymentVal = '';
+            let changeVal = '';
+            if (rec.paymentType === 'cash') {
+                paymentVal = `₱${Number(rec.cashReceived || 0).toFixed(2)}`;
+                changeVal = `₱${Number(rec.changeAmount || 0).toFixed(2)}`;
+            } else {
+                paymentVal = `GCash - ₱${total.toFixed(2)}`;
+                changeVal = '₱0.00';
+            }
+
+            const html =
+                '<!DOCTYPE html><html lang="en"><head><meta charset="utf-8">' +
+                '<meta name="viewport" content="width=device-width, initial-scale=1">' +
+                `<title>Receipt ${receiptNo}</title>` +
+                '<style>' +
+                '*,*::before,*::after{box-sizing:border-box;}' +
+                'html{-webkit-print-color-adjust:exact;print-color-adjust:exact;}' +
+                'body{margin:0;min-height:100vh;display:flex;justify-content:center;' +
+                'align-items:flex-start;padding:20px 12px;background:#d4d4d4;' +
+                'font-family:ui-monospace,Cousine,Consolas,"Courier New",monospace;' +
+                'font-size:11px;line-height:1.4;color:#0a0a0a;}' +
+                '.receipt{width:80mm;max-width:100%;background:#fff;padding:10px 7mm 14px;' +
+                'box-shadow:0 6px 28px rgba(0,0,0,0.14);}' +
+                '.logo-wrap{text-align:center;margin-bottom:6px;}' +
+                '.receipt-logo{display:block;margin:0 auto;width:112px;max-width:min(120px,100%);' +
+                'height:auto;object-fit:contain;}' +
+                '.brand{text-align:center;margin-top:6px;}' +
+                '.brand-name{font-size:14px;font-weight:700;letter-spacing:0.04em;text-transform:uppercase;}' +
+                '.slogan{font-size:10px;margin-top:3px;font-weight:600;}' +
+                '.addr{text-align:center;font-size:10px;line-height:1.45;margin-top:6px;padding:0 2px;' +
+                'max-width:100%;word-break:break-word;}' +
+                '.phone{text-align:center;font-size:11px;margin-top:4px;font-weight:600;}' +
+                '.rule{border:0;border-top:1px dashed #333;margin:8px 0;}' +
+                '.meta-row{display:flex;justify-content:space-between;gap:8px;margin:2px 0;font-size:10px;}' +
+                '.meta-row span:first-child{flex-shrink:0;color:#222;}' +
+                '.meta-row span:last-child{text-align:right;word-break:break-word;}' +
+                '.items{width:100%;border-collapse:collapse;table-layout:fixed;margin-top:2px;}' +
+                '.items th{font-size:9px;font-weight:700;text-transform:uppercase;padding:4px 0 6px;' +
+                'border-bottom:1px solid #111;text-align:left;}' +
+                '.items th:nth-child(2),.items th:nth-child(3),.items th:nth-child(4){text-align:right;}' +
+                '.items td{padding:5px 0 4px;vertical-align:top;border-bottom:1px dashed #ccc;font-size:10px;}' +
+                '.items td.num{text-align:right;white-space:nowrap;font-variant-numeric:tabular-nums;}' +
+                '.col-item{word-break:break-word;overflow-wrap:anywhere;padding-right:4px;}' +
+                '.dim{color:#444;font-size:9px;}' +
+                '.totals{margin-top:6px;font-size:10px;}' +
+                '.tline{display:flex;justify-content:space-between;margin:3px 0;gap:8px;}' +
+                '.tline span:last-child{white-space:nowrap;font-variant-numeric:tabular-nums;}' +
+                '.tline.major{font-weight:700;font-size:13px;margin-top:4px;}' +
+                '.tline.sub{border-top:1px dashed #333;padding-top:6px;margin-top:6px;}' +
+                '.footer{text-align:center;margin-top:12px;font-size:10px;line-height:1.5;}' +
+                '.footer strong{display:block;font-size:11px;letter-spacing:0.02em;margin-bottom:4px;}' +
+                '@media print{body{background:#fff!important;padding:0!important;display:block;}' +
+                '.receipt{box-shadow:none!important;width:80mm;max-width:80mm;margin:0 auto;padding:4mm 5mm 6mm;}' +
+                '@page{margin:2mm;size:auto;}}' +
+                '</style></head><body>' +
+                '<div class="receipt">' +
+                '<div class="logo-wrap">' +
+                `<img class="receipt-logo" src="${logoSrc}" alt="" />` +
+                '</div>' +
+                '<div class="brand">' +
+                '<div class="brand-name">KOPHI KIKI</div>' +
+                '<div class="slogan">KIK-LIGIN KA SA SARAP</div>' +
+                '</div>' +
+                '<div class="addr">Tatsulok Night Market, Barangay Fatima, General Santos City</div>' +
+                '<div class="phone">09920307525</div>' +
+                '<hr class="rule" />' +
+                `<div class="meta-row"><span>Receipt No.</span><span>${receiptNo}</span></div>` +
+                `<div class="meta-row"><span>Date</span><span>${escapeHtml(dateStr)}</span></div>` +
+                `<div class="meta-row"><span>Time</span><span>${escapeHtml(timeStr)}</span></div>` +
+                `<div class="meta-row"><span>Cashier</span><span>${escapeHtml(cashier)}</span></div>` +
+                '<hr class="rule" />' +
+                '<table class="items"><thead><tr>' +
+                '<th style="width:44%">ITEM</th>' +
+                '<th style="width:12%">QTY</th>' +
+                '<th style="width:22%">PRICE</th>' +
+                '<th style="width:22%">AMOUNT</th>' +
+                '</tr></thead><tbody>' +
+                rows +
+                '</tbody></table>' +
+                '<hr class="rule" />' +
+                '<div class="totals">' +
+                `<div class="tline"><span>Subtotal</span><span>₱${subtotal.toFixed(2)}</span></div>` +
+                `<div class="tline"><span>Discount</span><span>₱${discount.toFixed(2)}</span></div>` +
+                `<div class="tline major sub"><span>TOTAL</span><span>₱${total.toFixed(2)}</span></div>` +
+                `<div class="tline"><span>Payment</span><span>${escapeHtml(paymentVal)}</span></div>` +
+                `<div class="tline"><span>Change</span><span>${escapeHtml(changeVal)}</span></div>` +
+                '</div>' +
+                '<hr class="rule" />' +
+                '<div class="footer">' +
+                '<strong>THANK YOU &amp; COME AGAIN!</strong>' +
+                'We appreciate your support.' +
+                '</div>' +
+                '</div></body></html>';
+            try {
+                const iframe = document.createElement('iframe');
+                iframe.setAttribute('aria-hidden', 'true');
+                Object.assign(iframe.style, {
+                    position: 'fixed',
+                    right: '0',
+                    bottom: '0',
+                    width: '0',
+                    height: '0',
+                    border: '0',
+                    visibility: 'hidden',
+                });
+                document.body.appendChild(iframe);
+                const w = iframe.contentWindow;
+                const doc = w.document;
+                doc.open();
+                doc.write(html);
+                doc.close();
+                w.focus();
+                w.print();
+                window.setTimeout(() => {
+                    if (iframe.parentNode) {
+                        iframe.parentNode.removeChild(iframe);
+                    }
+                }, 500);
+            } catch (e) {
+                this.showToast('Could not open the print dialog.');
+            }
+        },
+        finishPrintReceiptPrompt(withPrint) {
+            if (!this.printReceiptModalOpen) return;
+            const rec = this.pendingReceipt;
+            const orderNumber = rec?.orderNumber || '';
+            this.printReceiptModalOpen = false;
+            this.pendingReceipt = null;
+            if (withPrint && rec) {
+                this.printReceiptFromSnapshot(rec);
+            }
+            this.showSuccess(
+                orderNumber ? `Order ${orderNumber} saved.` : 'Order saved.',
+            );
         },
         changeAmount() {
             const total = Number(this.total() || 0);
@@ -492,7 +687,6 @@ window.posOrder = function posOrder(initialLayout) {
             return diff > 0 ? diff : 0;
         },
         startCheckout() {
-            if (!this.ensureClockedIn()) return;
             this.checkoutError = '';
             if (this.cart.length === 0) return;
 
@@ -524,7 +718,6 @@ window.posOrder = function posOrder(initialLayout) {
             this.checkoutModal = true;
         },
         async confirmCheckout() {
-            if (!this.ensureClockedIn()) return;
             this.checkoutError = '';
             if (this.isSubmitting) return;
             if (this.cart.length === 0) {
@@ -600,9 +793,39 @@ window.posOrder = function posOrder(initialLayout) {
                     return;
                 }
 
-                const orderNumber = data?.order_number ? String(data.order_number) : '';
+                const orderNumber = data?.order_number
+                    ? String(data.order_number)
+                    : '';
+                const cashierSnap =
+                    (typeof window.__posCashierName === 'string' &&
+                        window.__posCashierName.trim()) ||
+                    (typeof document !== 'undefined' &&
+                        document
+                            .querySelector('[data-receipt-cashier-name]')
+                            ?.getAttribute('data-receipt-cashier-name')
+                            ?.trim()) ||
+                    (this.$el?.getAttribute('data-receipt-cashier-name') || '').trim() ||
+                    'Staff';
+                this.pendingReceipt = {
+                    orderNumber,
+                    cashierName: cashierSnap,
+                    items: this.cart.map((i) => ({
+                        name: String(i.name || ''),
+                        size: String(i.size || ''),
+                        price: Number(i.price) || 0,
+                        quantity: Number(i.quantity) || 0,
+                    })),
+                    total: this.total(),
+                    paymentType: this.paymentType,
+                    cashReceived:
+                        this.paymentType === 'cash'
+                            ? Number(this.cashReceived || 0)
+                            : null,
+                    changeAmount:
+                        this.paymentType === 'cash' ? this.changeAmount() : null,
+                };
                 this.resetAfterCheckout();
-                this.showSuccess(orderNumber ? `Order ${orderNumber} saved.` : 'Order saved.');
+                this.printReceiptModalOpen = true;
             } catch (e) {
                 this.checkoutError = 'Failed to confirm order. Please check your connection and try again.';
             } finally {

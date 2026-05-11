@@ -151,7 +151,7 @@
             <div class="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
                 <div class="flex flex-col gap-3 sm:flex-row sm:items-center">
                     <form method="GET" action="{{ route('admin.inventory.index') }}" class="flex flex-col gap-3 sm:flex-row sm:items-center">
-                        <select name="category" class="rounded-xl bg-white/5 border border-white/10 px-4 py-2 text-sm text-white focus:outline-none focus:ring-2 focus:ring-white/20">
+                        <select name="category" class="inventory-category-filter rounded-xl bg-white/5 border border-white/10 px-4 py-2 text-sm text-white focus:outline-none focus:ring-2 focus:ring-white/20">
                             <option value="">All Categories</option>
                             @foreach($categories as $cat)
                                 <option value="{{ $cat }}" {{ $selectedCategory === $cat ? 'selected' : '' }}>{{ $cat }}</option>

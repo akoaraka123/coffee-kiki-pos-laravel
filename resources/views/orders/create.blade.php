@@ -1,5 +1,15 @@
 @extends('layouts.pos-dashboard')
 
+@php
+    $posUser = auth()->user();
+    $posName = trim((string) ($posUser?->name ?? ''));
+    $posEmail = trim((string) ($posUser?->email ?? ''));
+    $posEmailLocal = $posEmail !== '' ? preg_replace('/@.*$/', '', $posEmail) : '';
+    $receiptCashierDisplay = ($posName !== '' && strcasecmp($posName, 'Staff') !== 0)
+        ? $posName
+        : ($posEmailLocal !== '' ? $posEmailLocal : ($posEmail !== '' ? $posEmail : 'Staff'));
+@endphp
+
 @section('title', 'POS')
 
 @section('pos_sidebar')
@@ -27,6 +37,8 @@
     data-products='@json($products)'
     data-inventory='@json($inventoryMap)'
     data-initial-layout="{{ auth()->user()->pos_layout === 'left' ? 'left' : 'right' }}"
+    data-receipt-logo-url="{{ asset('images/khopi-kiki-logo.png') }}"
+    data-receipt-cashier-name="{{ $receiptCashierDisplay }}"
 @endsection
 
 @section('content')
@@ -36,6 +48,7 @@
     >
         <script>
             window.__assetBaseUrl = @js(rtrim(asset(''), '/') . '/');
+            window.__posCashierName = @js($receiptCashierDisplay);
         </script>
         <div
             class="space-y-4 overflow-y-auto pr-2 min-h-0"
@@ -339,6 +352,34 @@
                         Confirm
                     </button>
                 </div>
+                </div>
+            </div>
+        </div>
+    </template>
+
+    <template x-if="printReceiptModalOpen">
+        <div class="fixed inset-0 z-[55]" x-on:keydown.escape.window="finishPrintReceiptPrompt(false)">
+            <div class="absolute inset-0 bg-black/70" x-transition.opacity x-on:click="finishPrintReceiptPrompt(false)"></div>
+            <div class="absolute inset-0 grid place-items-center px-4">
+                <div class="w-full max-w-md rounded-2xl border border-white/10 bg-[#111] p-6 shadow-2xl" x-transition x-on:click.stop>
+                    <div class="text-lg font-semibold">Print receipt?</div>
+                    <div class="mt-1 text-sm text-white/60">Would you like to print a receipt for this order?</div>
+                    <div class="mt-6 flex items-center justify-end gap-3">
+                        <button
+                            type="button"
+                            class="inline-flex items-center justify-center rounded-xl border border-white/10 bg-white/5 px-4 py-2 text-sm font-semibold text-white/80 hover:bg-white/10"
+                            x-on:click="finishPrintReceiptPrompt(false)"
+                        >
+                            No
+                        </button>
+                        <button
+                            type="button"
+                            class="inline-flex items-center justify-center rounded-xl border border-rose-600/35 bg-rose-600/25 px-4 py-2 text-sm font-semibold text-rose-100 shadow-sm hover:bg-rose-600/30"
+                            x-on:click="finishPrintReceiptPrompt(true)"
+                        >
+                            Yes
+                        </button>
+                    </div>
                 </div>
             </div>
         </div>
