@@ -1,20 +1,21 @@
 <?php
 
-use App\Http\Controllers\ProfileController;
+use App\Http\Controllers\Admin\AdminCategoryController;
+use App\Http\Controllers\Admin\AdminInventoryController;
+use App\Http\Controllers\Admin\AdminMoneyInventoryController;
+use App\Http\Controllers\Admin\AdminOrderController;
+use App\Http\Controllers\Admin\AdminPasswordResetRequestController;
+use App\Http\Controllers\Admin\AdminProductController;
+use App\Http\Controllers\Admin\AdminReportsController;
+use App\Http\Controllers\Admin\AdminUserController;
 use App\Http\Controllers\AdminDashboardController;
+use App\Http\Controllers\ForgotPasswordRequestController;
+use App\Http\Controllers\OrderController;
+use App\Http\Controllers\ProfileController;
 use App\Http\Controllers\StaffDashboardController;
 use App\Http\Controllers\StaffInventoryController;
 use App\Http\Controllers\StaffMoneyInventoryController;
 use App\Http\Controllers\StaffShiftController;
-use App\Http\Controllers\Admin\AdminUserController;
-use App\Http\Controllers\Admin\AdminOrderController;
-use App\Http\Controllers\Admin\AdminProductController;
-use App\Http\Controllers\Admin\AdminCategoryController;
-use App\Http\Controllers\Admin\AdminMoneyInventoryController;
-use App\Http\Controllers\Admin\AdminInventoryController;
-use App\Http\Controllers\Admin\AdminPasswordResetRequestController;
-use App\Http\Controllers\ForgotPasswordRequestController;
-use App\Http\Controllers\OrderController;
 use Illuminate\Support\Facades\Route;
 
 Route::redirect('/', '/login');
@@ -81,15 +82,18 @@ Route::prefix('admin')
 
         Route::get('/password-reset-requests', [AdminPasswordResetRequestController::class, 'index'])->name('password-reset-requests.index');
         Route::patch('/password-reset-requests/{passwordResetRequest}/resolve', [AdminPasswordResetRequestController::class, 'resolve'])->name('password-reset-requests.resolve');
-    });
 
+        Route::get('/reports', [AdminReportsController::class, 'index'])->name('reports.index');
+        Route::get('/reports/export/pdf', [AdminReportsController::class, 'exportPdf'])->name('reports.export.pdf');
+        Route::get('/reports/export/excel', [AdminReportsController::class, 'exportExcel'])->name('reports.export.excel');
+    });
 
 Route::prefix('staff')
     ->middleware(['auth', 'verified', 'password.current', 'role:staff'])
     ->name('staff.')
     ->group(function () {
         Route::get('/dashboard', StaffDashboardController::class)->name('dashboard');
-        
+
         Route::prefix('sales-session')->name('sales-session.')->group(function () {
             Route::get('/active', [StaffShiftController::class, 'active'])->name('active');
             Route::post('/close-and-create-new', [StaffShiftController::class, 'closeAndCreateNew'])->name('close-and-create-new');

@@ -1,0 +1,123 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <meta charset="utf-8">
+    <style>
+        * { box-sizing: border-box; }
+        body { font-family: DejaVu Sans, sans-serif; font-size: 9px; color: #111; margin: 28px 32px; background: #fff; }
+        .center { text-align: center; }
+        .logo { max-height: 72px; margin: 0 auto 10px; display: block; }
+        .biz-name { font-size: 15px; font-weight: bold; margin-top: 4px; }
+        .biz-line { font-size: 10px; line-height: 1.5; color: #222; }
+        .divider { border: none; border-top: 1px solid #000; margin: 16px 0 14px; }
+        .report-title { font-size: 15px; font-weight: bold; letter-spacing: 0.5px; margin: 0 0 6px; }
+        .date-range { font-size: 10px; margin-bottom: 14px; }
+        table.data { width: 100%; border-collapse: collapse; margin-top: 4px; }
+        table.data th, table.data td { border: 1px solid #222; padding: 6px 7px; vertical-align: top; }
+        table.data th { background: #000; color: #fff; font-size: 8.5px; font-weight: bold; text-align: left; }
+        table.data td { font-size: 8.5px; }
+        table.data tbody tr:nth-child(even) td { background: #f3f3f3; }
+        table.data tbody tr:nth-child(odd) td { background: #fff; }
+        .money { text-align: right; white-space: nowrap; }
+        .summary-wrap { margin-top: 18px; }
+        .summary-title { font-size: 11px; font-weight: bold; margin-bottom: 6px; }
+        table.summary { width: 100%; max-width: 520px; border-collapse: collapse; font-size: 10px; }
+        table.summary td { border: 1px solid #222; padding: 6px 8px; vertical-align: top; }
+        table.summary td.label { font-weight: bold; width: 52%; background: #fafafa; }
+        table.summary td.val { text-align: right; }
+        .footer { margin-top: 22px; text-align: center; font-size: 10px; line-height: 1.6; color: #222; }
+        .footer-thanks { font-weight: bold; margin-bottom: 4px; }
+    </style>
+</head>
+<body>
+    @if (!empty($logoSrc))
+        <div class="center"><img class="logo" src="{{ $logoSrc }}" alt="KOPHI KIKI"></div>
+    @endif
+
+    <div class="center">
+        <div class="biz-name">KOPHI KIKI</div>
+        <div class="biz-line"><strong>KIK-LIGIN KA SA SARAP</strong></div>
+        <div class="biz-line">Tatsulok Night Market, Fil-Am Avenue in Barangay Fatima, General Santos City</div>
+        <div class="biz-line">09920307525</div>
+    </div>
+
+    <hr class="divider">
+
+    <div class="center report-title">SALES REPORT</div>
+    <div class="center date-range">Date Range: {{ $summary['date_range_line'] ?? '' }}</div>
+
+    <table class="data">
+        <thead>
+            <tr>
+                <th>Receipt No.</th>
+                <th>Date</th>
+                <th>Time</th>
+                <th>Cashier</th>
+                <th>Items Ordered</th>
+                <th>Qty</th>
+                <th>Total Amount</th>
+                <th>Payment</th>
+                <th>Change</th>
+            </tr>
+        </thead>
+        <tbody>
+            @forelse ($rows as $row)
+                <tr>
+                    <td>{{ $row['receipt_no'] ?? '' }}</td>
+                    <td>{{ $row['date'] ?? '' }}</td>
+                    <td>{{ $row['time'] ?? '' }}</td>
+                    <td>{{ $row['cashier'] ?? '' }}</td>
+                    <td>{{ $row['items_ordered'] ?? '' }}</td>
+                    <td class="money">{{ $row['qty'] ?? '' }}</td>
+                    <td class="money">{{ $row['total_amount'] ?? '' }}</td>
+                    <td class="money">{{ $row['payment'] ?? '' }}</td>
+                    <td class="money">{{ $row['change'] ?? '' }}</td>
+                </tr>
+            @empty
+                <tr>
+                    <td colspan="9" style="text-align:center;padding:14px;">No records in this period.</td>
+                </tr>
+            @endforelse
+        </tbody>
+    </table>
+
+    <div class="summary-wrap">
+        <div class="summary-title">SUMMARY</div>
+        <table class="summary">
+            <tr>
+                <td class="label">Total Sales</td>
+                <td class="val">₱{{ number_format((float) ($summary['total_sales'] ?? 0), 2, '.', ',') }}</td>
+            </tr>
+            <tr>
+                <td class="label">Total Orders</td>
+                <td class="val">{{ $summary['total_orders'] ?? 0 }}</td>
+            </tr>
+            <tr>
+                <td class="label">Total Items Sold</td>
+                <td class="val">{{ $summary['total_items'] ?? 0 }}</td>
+            </tr>
+            <tr>
+                <td class="label">Total Payments</td>
+                <td class="val">₱{{ number_format((float) ($summary['total_payments'] ?? 0), 2, '.', ',') }}</td>
+            </tr>
+            <tr>
+                <td class="label">Total Change</td>
+                <td class="val">₱{{ number_format((float) ($summary['total_change'] ?? 0), 2, '.', ',') }}</td>
+            </tr>
+            <tr>
+                <td class="label">Report Generated By</td>
+                <td class="val" style="text-align:right;">{{ $generatedBy }}</td>
+            </tr>
+            <tr>
+                <td class="label">Generated Date &amp; Time</td>
+                <td class="val" style="text-align:right;">{{ $generatedAt }}</td>
+            </tr>
+        </table>
+    </div>
+
+    <div class="footer">
+        <div class="footer-thanks">Thank you!</div>
+        <div>This is a system generated report.</div>
+    </div>
+</body>
+</html>
