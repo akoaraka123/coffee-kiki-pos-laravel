@@ -12,10 +12,16 @@ use App\Http\Controllers\Admin\AdminProductController;
 use App\Http\Controllers\Admin\AdminCategoryController;
 use App\Http\Controllers\Admin\AdminMoneyInventoryController;
 use App\Http\Controllers\Admin\AdminInventoryController;
+use App\Http\Controllers\Admin\AdminPasswordResetRequestController;
+use App\Http\Controllers\ForgotPasswordRequestController;
 use App\Http\Controllers\OrderController;
 use Illuminate\Support\Facades\Route;
 
 Route::redirect('/', '/login');
+
+Route::post('/forgot-password-request', [ForgotPasswordRequestController::class, 'store'])
+    ->middleware(['guest', 'throttle:10,1'])
+    ->name('forgot-password-request.store');
 
 Route::get('/dashboard', function () {
     $user = request()->user();
@@ -72,6 +78,9 @@ Route::prefix('admin')
         Route::post('/inventory/add-stock', [AdminInventoryController::class, 'addStock'])->name('inventory.add-stock');
         Route::post('/inventory/delete-stock', [AdminInventoryController::class, 'deleteStock'])->name('inventory.delete-stock');
         Route::post('/inventory/initialize', [AdminInventoryController::class, 'initializeInventory'])->name('inventory.initialize');
+
+        Route::get('/password-reset-requests', [AdminPasswordResetRequestController::class, 'index'])->name('password-reset-requests.index');
+        Route::patch('/password-reset-requests/{passwordResetRequest}/resolve', [AdminPasswordResetRequestController::class, 'resolve'])->name('password-reset-requests.resolve');
     });
 
 

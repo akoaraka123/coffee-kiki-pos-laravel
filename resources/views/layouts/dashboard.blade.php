@@ -39,6 +39,84 @@
                         </div>
 
                         <div class="flex flex-1 items-center justify-end gap-3">
+                            @if (auth()->check() && auth()->user()->role === 'admin')
+                                <div
+                                    class="relative"
+                                    x-data="passwordResetNotifications({
+                                        fetchUrl: @js(route('admin.password-reset-requests.index', ['status' => 'pending'])),
+                                        indexPageUrl: @js(route('admin.password-reset-requests.index')),
+                                        resolveUrlTemplate: @js(preg_replace('#/\d+/resolve$#', '/__PRR__/resolve', route('admin.password-reset-requests.resolve', ['passwordResetRequest' => 1]))),
+                                    })"
+                                    x-init="load()"
+                                    @click.outside="open = false"
+                                >
+                                    <button
+                                        type="button"
+                                        class="relative inline-flex h-10 w-10 items-center justify-center rounded-xl border border-white/10 bg-white/5 text-white/80 hover:bg-white/10"
+                                        x-on:click="toggleOpen()"
+                                        aria-label="Password reset notifications"
+                                    >
+                                        <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor" class="h-5 w-5">
+                                            <path stroke-linecap="round" stroke-linejoin="round" d="M14.857 17.082a23.848 23.848 0 005.454-1.31A8.967 8.967 0 0118 9.75v-.7V9A6 6 0 006 9v.75a8.967 8.967 0 01-2.312 6.022c1.733.64 3.56 1.085 5.455 1.31m5.714 0a24.255 24.255 0 01-5.714 0m5.714 0a3 3 0 11-5.714 0" />
+                                        </svg>
+                                        <span
+                                            x-show="pendingCount > 0"
+                                            x-cloak
+                                            class="absolute -right-0.5 -top-0.5 flex h-5 min-w-[1.25rem] items-center justify-center rounded-full bg-rose-600 px-1 text-[10px] font-bold leading-none text-white shadow"
+                                            x-text="pendingCount > 99 ? '99+' : pendingCount"
+                                        ></span>
+                                    </button>
+
+                                    <div
+                                        x-show="open"
+                                        x-cloak
+                                        x-transition.opacity.duration.150ms
+                                        class="absolute right-0 top-full z-[60] mt-2 w-[min(calc(100vw-2rem),22rem)] max-h-[min(70vh,24rem)] overflow-y-auto rounded-xl border border-white/10 bg-[#1b1b1b] py-2 shadow-2xl"
+                                    >
+                                        <div class="border-b border-white/10 px-3 pb-2">
+                                            <p class="text-xs font-semibold text-white/90">Pending password resets</p>
+                                            <p class="mt-0.5 text-[11px] text-white/45">Help staff reset their password, then mark resolved.</p>
+                                        </div>
+                                        <template x-if="loading">
+                                            <div class="px-3 py-6 text-center text-xs text-white/50">Loading…</div>
+                                        </template>
+                                        <template x-if="!loading && items.length === 0">
+                                            <div class="px-3 py-6 text-center text-xs text-white/50">No pending requests.</div>
+                                        </template>
+                                        <ul class="divide-y divide-white/10">
+                                            <template x-for="item in items" :key="item.id">
+                                                <li class="px-3 py-3">
+                                                    <div class="text-sm font-medium text-white" x-text="item.name"></div>
+                                                    <div class="mt-0.5 text-xs text-white/55" x-text="item.email"></div>
+                                                    <div class="mt-1 flex flex-wrap items-center gap-2 text-[11px] text-white/45">
+                                                        <span class="rounded-full border border-white/10 bg-white/5 px-2 py-0.5 capitalize text-white/75" x-text="item.role"></span>
+                                                        <span x-text="formatDate(item.requested_at)"></span>
+                                                        <span class="rounded-full border border-amber-500/30 bg-amber-500/10 px-2 py-0.5 text-amber-200/90">Pending</span>
+                                                    </div>
+                                                    <div class="mt-2 flex gap-2">
+                                                        <a
+                                                            :href="indexPageUrl + '#request-' + item.id"
+                                                            class="inline-flex flex-1 items-center justify-center rounded-lg border border-white/10 bg-white/5 px-2 py-1.5 text-xs font-semibold text-white/85 hover:bg-white/10"
+                                                        >View</a>
+                                                        <button
+                                                            type="button"
+                                                            class="inline-flex flex-1 items-center justify-center rounded-lg bg-[#efe9df] px-2 py-1.5 text-xs font-semibold text-[#1c1c1c] hover:opacity-95 disabled:opacity-50"
+                                                            :disabled="resolvingId === item.id"
+                                                            x-on:click="resolve(item.id)"
+                                                        >
+                                                            <span x-show="resolvingId !== item.id">Mark as Resolved</span>
+                                                            <span x-show="resolvingId === item.id">…</span>
+                                                        </button>
+                                                    </div>
+                                                </li>
+                                            </template>
+                                        </ul>
+                                        <div class="border-t border-white/10 px-3 pt-2">
+                                            <a href="{{ route('admin.password-reset-requests.index') }}" class="block text-center text-xs font-medium text-white/70 underline decoration-white/25 hover:text-white">Open full page</a>
+                                        </div>
+                                    </div>
+                                </div>
+                            @endif
                             <div class="hidden text-right sm:block">
                                 <div class="text-sm font-medium">{{ Auth::user()->name }}</div>
                                 <div class="text-xs text-white/50">{{ Auth::user()->email }}</div>
@@ -111,6 +189,10 @@
                                             <span class="grid h-9 w-9 place-items-center rounded-xl border border-white/10 bg-white/5 text-white/80 group-hover:bg-white/10">U</span>
                                             <span class="font-medium" x-show="!(isDesktop && sidebarCollapsed)">Manage Users</span>
                                         </a>
+                                        <a href="{{ route('admin.password-reset-requests.index') }}" class="group flex items-center gap-3 rounded-xl px-4 py-3 text-sm {{ request()->routeIs('admin.password-reset-requests.*') ? 'bg-white/10 text-white' : 'text-white/70 hover:bg-white/5 hover:text-white' }}" :title="(isDesktop && sidebarCollapsed) ? 'Password resets' : ''">
+                                            <span class="grid h-9 w-9 place-items-center rounded-xl border border-white/10 bg-white/5 text-white/80 group-hover:bg-white/10">R</span>
+                                            <span class="font-medium" x-show="!(isDesktop && sidebarCollapsed)">Password Resets</span>
+                                        </a>
                                     @endif
                                 </div>
                             </div>
@@ -180,6 +262,87 @@
                             this.sidebarOpen = !this.sidebarOpen;
                         },
                     }
+                }
+
+                function passwordResetNotifications(config) {
+                    return {
+                        open: false,
+                        loading: false,
+                        items: [],
+                        pendingCount: 0,
+                        resolvingId: null,
+                        fetchUrl: config.fetchUrl,
+                        indexPageUrl: config.indexPageUrl,
+                        resolveUrlTemplate: config.resolveUrlTemplate,
+                        toggleOpen() {
+                            this.open = !this.open;
+                            if (this.open) {
+                                this.load();
+                            }
+                        },
+                        formatDate(iso) {
+                            if (!iso) return '';
+                            try {
+                                var d = new Date(iso);
+                                return d.toLocaleString(undefined, { dateStyle: 'medium', timeStyle: 'short' });
+                            } catch (e) {
+                                return '';
+                            }
+                        },
+                        async load() {
+                            this.loading = true;
+                            try {
+                                var token = document.querySelector('meta[name="csrf-token"]');
+                                var res = await fetch(this.fetchUrl, {
+                                    headers: {
+                                        Accept: 'application/json',
+                                        'X-Requested-With': 'XMLHttpRequest',
+                                        'X-CSRF-TOKEN': token ? token.getAttribute('content') : '',
+                                    },
+                                    credentials: 'same-origin',
+                                });
+                                var data = await res.json();
+                                if (res.ok) {
+                                    this.items = Array.isArray(data.data) ? data.data : [];
+                                    this.pendingCount = typeof data.pending_count === 'number' ? data.pending_count : this.items.length;
+                                }
+                            } catch (e) {
+                                this.items = [];
+                            } finally {
+                                this.loading = false;
+                            }
+                        },
+                        async resolve(id) {
+                            if (this.resolvingId) return;
+                            this.resolvingId = id;
+                            var token = document.querySelector('meta[name="csrf-token"]');
+                            var url = this.resolveUrlTemplate.replace('__PRR__', String(id));
+                            try {
+                                var res = await fetch(url, {
+                                    method: 'PATCH',
+                                    headers: {
+                                        Accept: 'application/json',
+                                        'Content-Type': 'application/json',
+                                        'X-Requested-With': 'XMLHttpRequest',
+                                        'X-CSRF-TOKEN': token ? token.getAttribute('content') : '',
+                                    },
+                                    credentials: 'same-origin',
+                                    body: JSON.stringify({}),
+                                });
+                                var data = await res.json().catch(function () { return {}; });
+                                if (res.ok) {
+                                    this.items = this.items.filter(function (i) { return i.id !== id; });
+                                    if (typeof data.pending_count === 'number') {
+                                        this.pendingCount = data.pending_count;
+                                    } else {
+                                        this.pendingCount = Math.max(0, this.pendingCount - 1);
+                                    }
+                                }
+                            } finally {
+                                this.resolvingId = null;
+                            }
+                        },
+                    };
                 }
             </script>
         </div>
